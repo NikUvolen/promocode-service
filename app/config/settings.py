@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'promo',
+    'draws',
 ]
 
 MIDDLEWARE = [

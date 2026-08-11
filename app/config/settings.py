@@ -173,6 +173,7 @@ FRONTEND_URL = getenv('FRONTEND_URL', 'http://localhost:3000')
 EMAIL_VERIFICATION_TIMEOUT = int(
     getenv('EMAIL_VERIFICATION_TIMEOUT', str(24 * 60 * 60))
 )
+PASSWORD_RESET_TIMEOUT = int(getenv('PASSWORD_RESET_TIMEOUT', '3600'))
 
 
 # Celery

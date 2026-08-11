@@ -4,6 +4,7 @@ from .authentication import (
     create_token_pair,
 )
 from .email_verification import verify_email
+from .passwords import request_password_reset, reset_password
 from .registration import register_user, resend_verification_email
 
 
@@ -12,6 +13,8 @@ __all__ = (
     'blacklist_refresh_token',
     'create_token_pair',
     'register_user',
+    'request_password_reset',
+    'reset_password',
     'resend_verification_email',
     'verify_email',
 )

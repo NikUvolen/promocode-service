@@ -21,6 +21,11 @@ from accounts.services.registration import (
     PersonalDataConsentRequired,
     register_user,
 )
+from accounts.services.passwords import (
+    InvalidNewPassword,
+    InvalidPasswordResetToken,
+    reset_password,
+)
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -121,6 +126,31 @@ class LogoutSerializer(serializers.Serializer):
         except InvalidRefreshToken as exc:
             raise serializers.ValidationError(
                 {'refresh': 'Refresh-токен недействителен.'}
+            ) from exc
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(trim_whitespace=False)
+    token = serializers.CharField(trim_whitespace=False)
+    new_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+    )
+
+    def save(self, **kwargs):
+        try:
+            return reset_password(**self.validated_data)
+        except InvalidPasswordResetToken as exc:
+            raise serializers.ValidationError(
+                {'token': 'Ссылка недействительна или устарела.'}
+            ) from exc
+        except InvalidNewPassword as exc:
+            raise serializers.ValidationError(
+                {'new_password': exc.messages}
             ) from exc
 
 

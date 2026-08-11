@@ -5,11 +5,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.services.registration import resend_verification_email
+from accounts.services.passwords import request_password_reset
 
 from .serializers import (
     DetailResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     RefreshSerializer,
     RegistrationResponseSerializer,
     RegisterSerializer,
@@ -75,6 +78,41 @@ class AuthViewSet(viewsets.GenericViewSet):
                 )
             }
         )
+
+    @extend_schema(
+        tags=('Авторизация',),
+        request=PasswordResetRequestSerializer,
+        responses={200: DetailResponseSerializer},
+    )
+    @action(detail=False, methods=('post',), url_path='password-reset')
+    def password_reset(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request_password_reset(serializer.validated_data['email'])
+        return Response(
+            {
+                'detail': (
+                    'Если аккаунт существует, письмо для восстановления '
+                    'будет отправлено.'
+                )
+            }
+        )
+
+    @extend_schema(
+        tags=('Авторизация',),
+        request=PasswordResetConfirmSerializer,
+        responses={200: DetailResponseSerializer},
+    )
+    @action(
+        detail=False,
+        methods=('post',),
+        url_path='password-reset-confirm',
+    )
+    def password_reset_confirm(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({'detail': 'Пароль изменен.'})
 
     @extend_schema(
         tags=('Авторизация',),

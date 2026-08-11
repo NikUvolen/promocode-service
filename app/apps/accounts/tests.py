@@ -10,6 +10,11 @@ from .services.email_verification import (
     create_email_verification_token,
     send_verification_email,
 )
+from .services.authentication import create_token_pair
+from .services.passwords import (
+    create_password_reset_credentials,
+    send_password_reset_email,
+)
 
 
 class AccountsAdminTests(TestCase):
@@ -223,3 +228,98 @@ class JwtAuthApiTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(reused_response.status_code, 400)
+
+
+class PasswordResetApiTests(TestCase):
+    request_url = reverse('auth-password-reset')
+    confirm_url = reverse('auth-password-reset-confirm')
+    refresh_url = reverse('auth-refresh')
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='user@example.com',
+            password='OldPassword_123!',
+            is_email_verified=True,
+        )
+
+    @patch('accounts.services.passwords.schedule_password_reset_email')
+    def test_requests_password_reset(self, schedule_email):
+        response = self.client.post(
+            self.request_url,
+            {'email': self.user.email},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        schedule_email.assert_called_once_with(self.user.pk)
+
+    @patch('accounts.services.passwords.schedule_password_reset_email')
+    def test_request_does_not_disclose_missing_account(self, schedule_email):
+        response = self.client.post(
+            self.request_url,
+            {'email': 'missing@example.com'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        schedule_email.assert_not_called()
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        FRONTEND_URL='https://promo.example.com',
+    )
+    def test_password_reset_email_contains_link(self):
+        send_password_reset_email(self.user.pk)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(
+            'https://promo.example.com/reset-password?',
+            mail.outbox[0].body,
+        )
+
+    def test_resets_password_and_blacklists_refresh_tokens(self):
+        refresh = create_token_pair(self.user)['refresh']
+        credentials = create_password_reset_credentials(self.user)
+
+        response = self.client.post(
+            self.confirm_url,
+            {**credentials, 'new_password': 'NewPassword_456!'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewPassword_456!'))
+        refresh_response = self.client.post(
+            self.refresh_url,
+            {'refresh': refresh},
+            content_type='application/json',
+        )
+        self.assertEqual(refresh_response.status_code, 400)
+
+    def test_rejects_invalid_reset_token(self):
+        credentials = create_password_reset_credentials(self.user)
+        credentials['token'] = 'invalid-token'
+
+        response = self.client.post(
+            self.confirm_url,
+            {**credentials, 'new_password': 'NewPassword_456!'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('OldPassword_123!'))
+
+    def test_rejects_weak_new_password(self):
+        credentials = create_password_reset_credentials(self.user)
+
+        response = self.client.post(
+            self.confirm_url,
+            {**credentials, 'new_password': '123'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('OldPassword_123!'))

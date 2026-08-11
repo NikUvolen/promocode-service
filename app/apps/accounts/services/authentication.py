@@ -1,6 +1,10 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
@@ -47,3 +51,14 @@ def blacklist_refresh_token(token):
         RefreshToken(token).blacklist()
     except TokenError as exc:
         raise InvalidRefreshToken from exc
+
+
+def blacklist_user_refresh_tokens(user):
+    outstanding_tokens = OutstandingToken.objects.filter(
+        user=user,
+        blacklistedtoken__isnull=True,
+    )
+    BlacklistedToken.objects.bulk_create(
+        [BlacklistedToken(token=token) for token in outstanding_tokens],
+        ignore_conflicts=True,
+    )

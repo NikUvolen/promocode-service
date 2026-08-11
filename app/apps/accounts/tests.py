@@ -5,7 +5,7 @@ from django.test import override_settings
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import User
+from .models import Profile, User
 from .services.email_verification import (
     create_email_verification_token,
     send_verification_email,
@@ -142,3 +142,94 @@ class RegistrationApiTests(TestCase):
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('https://promo.example.com/verify-email?', mail.outbox[0].body)
+
+
+class JwtAuthApiTests(TestCase):
+    login_url = reverse('auth-login')
+    refresh_url = reverse('auth-refresh')
+    logout_url = reverse('auth-logout')
+
+    def create_user(self, *, is_email_verified=True):
+        user = User.objects.create_user(
+            email='user@example.com',
+            password='StrongPassword_123!',
+            is_email_verified=is_email_verified,
+        )
+        Profile.objects.create(user=user)
+        return user
+
+    def login(self, **overrides):
+        data = {
+            'email': 'user@example.com',
+            'password': 'StrongPassword_123!',
+            'personal_data_consent': True,
+        }
+        data.update(overrides)
+        return self.client.post(
+            self.login_url,
+            data,
+            content_type='application/json',
+        )
+
+    def test_login_returns_token_pair(self):
+        user = self.create_user()
+
+        response = self.login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('access', response.json())
+        self.assertIn('refresh', response.json())
+        user.refresh_from_db()
+        self.assertIsNotNone(user.last_login)
+        self.assertIsNotNone(user.profile.personal_data_consent_at)
+
+    def test_login_rejects_invalid_credentials(self):
+        self.create_user()
+
+        response = self.login(password='wrong-password')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('access', response.json())
+
+    def test_login_requires_verified_email(self):
+        self.create_user(is_email_verified=False)
+
+        response = self.login()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('access', response.json())
+
+    def test_login_requires_personal_data_consent(self):
+        self.create_user()
+
+        response = self.login(personal_data_consent=False)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('access', response.json())
+
+    def test_refresh_rotates_token_and_logout_blacklists_it(self):
+        self.create_user()
+        login_response = self.login()
+        refresh = login_response.json()['refresh']
+
+        refresh_response = self.client.post(
+            self.refresh_url,
+            {'refresh': refresh},
+            content_type='application/json',
+        )
+
+        self.assertEqual(refresh_response.status_code, 200)
+        rotated_refresh = refresh_response.json()['refresh']
+        logout_response = self.client.post(
+            self.logout_url,
+            {'refresh': rotated_refresh},
+            content_type='application/json',
+        )
+        self.assertEqual(logout_response.status_code, 204)
+
+        reused_response = self.client.post(
+            self.refresh_url,
+            {'refresh': rotated_refresh},
+            content_type='application/json',
+        )
+        self.assertEqual(reused_response.status_code, 400)

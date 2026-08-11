@@ -6,6 +6,9 @@ from rest_framework.response import Response
 from accounts.services.registration import resend_verification_email
 
 from .serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    RefreshSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
     VerifyEmailSerializer,
@@ -53,3 +56,25 @@ class AuthViewSet(viewsets.GenericViewSet):
                 )
             }
         )
+
+    @action(detail=False, methods=('post',))
+    def login(self, request):
+        serializer = LoginSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
+
+    @action(detail=False, methods=('post',))
+    def refresh(self, request):
+        serializer = RefreshSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
+
+    @action(detail=False, methods=('post',))
+    def logout(self, request):
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)

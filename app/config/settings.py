@@ -26,6 +26,8 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'unfold',
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -111,7 +113,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-ru'
 
 TIME_ZONE = 'Europe/Moscow'
 
@@ -136,3 +138,12 @@ MAILERS = {
 }
 
 AUTH_USER_MODEL = 'accounts.User'
+
+UNFOLD = {
+    'SITE_TITLE': 'Промоакция',
+    'SITE_HEADER': 'Управление промоакцией',
+    'SITE_SUBHEADER': 'Промокоды и ежедневные розыгрыши',
+    'SITE_SYMBOL': 'redeem',
+    'SHOW_HISTORY': True,
+    'SHOW_VIEW_ON_SITE': False,
+}

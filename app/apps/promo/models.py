@@ -32,7 +32,20 @@ class PromoCode(models.Model):
             models.CheckConstraint(
                 condition=models.Q(code__regex=r'^[A-Z0-9]{8}$'),
                 name='promo_code_format_valid',
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        registered_by__isnull=True,
+                        registered_at__isnull=True,
+                    )
+                    | models.Q(
+                        registered_by__isnull=False,
+                        registered_at__isnull=False,
+                    )
+                ),
+                name='promo_code_registration_consistent',
+            ),
         ]
         indexes = [
             models.Index(fields=['registered_at']),

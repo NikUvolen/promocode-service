@@ -2,13 +2,52 @@ from django.conf import settings
 from django.db import models
 
 
+class Draw(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        RUNNING = 'running', 'Running'
+        COMPLETED = 'completed', 'Completed'
+        FAILED = 'failed', 'Failed'
+
+    class Trigger(models.TextChoices):
+        AUTOMATIC = 'automatic', 'Automatic'
+        MANUAL = 'manual', 'Manual'
+
+    draw_date = models.DateField(unique=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    trigger = models.CharField(
+        max_length=16,
+        choices=Trigger.choices,
+        default=Trigger.AUTOMATIC,
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.draw_date} | {self.status}'
+
+    class Meta:
+        verbose_name = 'draw'
+        verbose_name_plural = 'draws'
+        ordering = ['-draw_date']
+
+
 class Winner(models.Model):
     class Prize(models.TextChoices):
-        OZON_1500 = 'ozon_1500', 'Ozon 1500'
         OZON_3000 = 'ozon_3000', 'Ozon 3000'
-        OZON_5000 = 'ozon_5000', 'Ozon 5000'
+        AIRPODS = 'airpods', 'AirPods'
 
-    draw_date = models.DateField()
+    draw = models.ForeignKey(
+        Draw,
+        on_delete=models.PROTECT,
+        related_name='winners',
+    )
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -34,7 +73,7 @@ class Winner(models.Model):
     )
 
     def __str__(self):
-        return f'{self.draw_date} | {self.user.pk} | {self.prize}'
+        return f'{self.draw.draw_date} | {self.user.pk} | {self.prize}'
 
     class Meta:
         verbose_name = 'winner'
@@ -45,10 +84,8 @@ class Winner(models.Model):
                 name='unique_winner_user',
             ),
             models.UniqueConstraint(
-                fields=['draw_date', 'prize'],
-                name='unique_prize_per_draw_date',
+                fields=['draw', 'prize'],
+                name='unique_prize_per_draw',
             ),
         ]
-        indexes = [
-            models.Index(fields=['draw_date']),
-        ]
+        ordering = ['-won_at']

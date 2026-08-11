@@ -38,7 +38,7 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     is_email_verified = models.BooleanField(default=False)
 
-    objects = UserManager() # type: ignore[assignment]
+    objects = UserManager()  # type: ignore[assignment]
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
@@ -98,6 +98,15 @@ class Profile(models.Model):
     class Meta:
         verbose_name = 'profile'
         verbose_name_plural = 'profiles'
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(no_middle_name=False)
+                    | models.Q(middle_name='')
+                ),
+                name='profile_no_middle_name_consistent',
+            ),
+        ]
 
     @property
     def is_complete(self):

@@ -11,7 +11,7 @@ class UserManager(BaseUserManager):
         if not email:
             raise ValueError('Users must have an email address')
 
-        email = self.normalize_email(email)
+        email = self.normalize_email(email).lower()
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -45,6 +45,10 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+    def clean(self):
+        super().clean()
+        self.email = self.__class__.objects.normalize_email(self.email).lower()
 
     class Meta:
         verbose_name = 'user'

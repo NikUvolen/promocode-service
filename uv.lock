@@ -26,6 +26,18 @@ wheels = [
 ]
 
 [[package]]
+name = "django-unfold"
+version = "0.104.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fe/8e/089378d8ee87f36fe5d7c70d23f4b9c2922751d1506e81a8c91ad25334ad/django_unfold-0.104.0.tar.gz", hash = "sha256:54caaff44d14dc839bc31c57fb624633558d8443ac14d4bc4a99a37d163da0ae", size = 1126044, upload-time = "2026-08-10T14:08:18.303Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/eb/686688862218f850ecba9035da303e17cd6e5bbdba2d7f154ac296b1fc25/django_unfold-0.104.0-py3-none-any.whl", hash = "sha256:ede1306105b90c1135b66f3d4bd245ebeae3742fb376dc98b6a09b8253867feb", size = 1254147, upload-time = "2026-08-10T14:08:16.989Z" },
+]
+
+[[package]]
 name = "djangorestframework"
 version = "3.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -68,6 +80,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "django" },
+    { name = "django-unfold" },
     { name = "djangorestframework" },
     { name = "djangorestframework-simplejwt" },
     { name = "dotenv" },
@@ -77,6 +90,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "django", specifier = ">=6.1" },
+    { name = "django-unfold", specifier = ">=0.104.0" },
     { name = "djangorestframework", specifier = ">=3.18.0" },
     { name = "djangorestframework-simplejwt", specifier = ">=5.5.1" },
     { name = "dotenv", specifier = ">=0.9.9" },

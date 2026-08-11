@@ -50,8 +50,10 @@ export default function AccountPage() {
   return (
     <div className="account-page">
       <header className="account-header">
-        <Brand />
-        <button className="icon-text-button" type="button" onClick={handleLogout}><LogOut size={19} /> Выйти</button>
+        <div className="account-header__inner">
+          <Brand />
+          <button className="icon-text-button" type="button" onClick={handleLogout}><LogOut size={19} /> Выйти</button>
+        </div>
       </header>
       <main className="account-main">
         <section className="account-intro">

@@ -17,6 +17,7 @@ class ApiDocumentationTests(TestCase):
             '/api/v1/auth/logout/',
             '/api/v1/auth/password-reset/',
             '/api/v1/auth/password-reset-confirm/',
+            '/api/v1/auth/change-password/',
         )
         for path in expected_paths:
             with self.subTest(path=path):

@@ -27,6 +27,10 @@ class InvalidNewPassword(Exception):
         super().__init__(*messages)
 
 
+class InvalidOldPassword(Exception):
+    pass
+
+
 def create_password_reset_credentials(user):
     return {
         'uid': urlsafe_base64_encode(force_bytes(user.pk)),
@@ -90,6 +94,27 @@ def reset_password(*, uid, token, new_password):
 
     if not default_token_generator.check_token(user, token):
         raise InvalidPasswordResetToken
+
+    try:
+        validate_password(new_password, user=user)
+    except ValidationError as exc:
+        raise InvalidNewPassword(exc.messages) from exc
+
+    with transaction.atomic():
+        user.set_password(new_password)
+        user.save(update_fields=('password',))
+        blacklist_user_refresh_tokens(user)
+
+    return user
+
+
+def change_password(*, user, old_password, new_password):
+    if not user.check_password(old_password):
+        raise InvalidOldPassword
+    if user.check_password(new_password):
+        raise InvalidNewPassword(
+            ['Новый пароль должен отличаться от текущего.']
+        )
 
     try:
         validate_password(new_password, user=user)

@@ -323,3 +323,68 @@ class PasswordResetApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('OldPassword_123!'))
+
+
+class ChangePasswordApiTests(TestCase):
+    change_url = reverse('auth-change-password')
+    refresh_url = reverse('auth-refresh')
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='user@example.com',
+            password='OldPassword_123!',
+            is_email_verified=True,
+        )
+        self.tokens = create_token_pair(self.user)
+
+    def change_password(self, **overrides):
+        data = {
+            'old_password': 'OldPassword_123!',
+            'new_password': 'NewPassword_456!',
+        }
+        data.update(overrides)
+        return self.client.post(
+            self.change_url,
+            data,
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+
+    def test_requires_authentication(self):
+        response = self.client.post(
+            self.change_url,
+            {
+                'old_password': 'OldPassword_123!',
+                'new_password': 'NewPassword_456!',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_changes_password_and_blacklists_refresh_tokens(self):
+        response = self.change_password()
+
+        self.assertEqual(response.status_code, 204)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewPassword_456!'))
+        refresh_response = self.client.post(
+            self.refresh_url,
+            {'refresh': self.tokens['refresh']},
+            content_type='application/json',
+        )
+        self.assertEqual(refresh_response.status_code, 400)
+
+    def test_rejects_invalid_old_password(self):
+        response = self.change_password(old_password='wrong-password')
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('OldPassword_123!'))
+
+    def test_rejects_same_password(self):
+        response = self.change_password(new_password='OldPassword_123!')
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('OldPassword_123!'))

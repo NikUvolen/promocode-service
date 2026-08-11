@@ -23,7 +23,9 @@ from accounts.services.registration import (
 )
 from accounts.services.passwords import (
     InvalidNewPassword,
+    InvalidOldPassword,
     InvalidPasswordResetToken,
+    change_password,
     reset_password,
 )
 
@@ -147,6 +149,32 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         except InvalidPasswordResetToken as exc:
             raise serializers.ValidationError(
                 {'token': 'Ссылка недействительна или устарела.'}
+            ) from exc
+        except InvalidNewPassword as exc:
+            raise serializers.ValidationError(
+                {'new_password': exc.messages}
+            ) from exc
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+    )
+
+    def save(self, **kwargs):
+        try:
+            return change_password(
+                user=self.context['request'].user,
+                **self.validated_data,
+            )
+        except InvalidOldPassword as exc:
+            raise serializers.ValidationError(
+                {'old_password': 'Текущий пароль указан неверно.'}
             ) from exc
         except InvalidNewPassword as exc:
             raise serializers.ValidationError(

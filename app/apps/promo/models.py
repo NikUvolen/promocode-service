@@ -28,6 +28,12 @@ class PromoCode(models.Model):
     class Meta:
         verbose_name = 'promo code'
         verbose_name_plural = 'promo codes'
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(code__regex=r'^[A-Z0-9]{8}$'),
+                name='promo_code_format_valid',
+            )
+        ]
         indexes = [
             models.Index(fields=['registered_at']),
             models.Index(fields=['registered_by']),

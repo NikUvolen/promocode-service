@@ -1,3 +1,4 @@
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -6,11 +7,14 @@ from rest_framework.response import Response
 from accounts.services.registration import resend_verification_email
 
 from .serializers import (
+    DetailResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
     RefreshSerializer,
+    RegistrationResponseSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
+    TokenPairResponseSerializer,
     VerifyEmailSerializer,
 )
 
@@ -19,6 +23,11 @@ class AuthViewSet(viewsets.GenericViewSet):
     authentication_classes = ()
     permission_classes = (AllowAny,)
 
+    @extend_schema(
+        tags=('Авторизация',),
+        request=RegisterSerializer,
+        responses={201: RegistrationResponseSerializer},
+    )
     @action(detail=False, methods=('post',))
     def register(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -32,6 +41,11 @@ class AuthViewSet(viewsets.GenericViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @extend_schema(
+        tags=('Авторизация',),
+        request=VerifyEmailSerializer,
+        responses={200: DetailResponseSerializer},
+    )
     @action(detail=False, methods=('post',), url_path='verify-email')
     def verify_email(self, request):
         serializer = VerifyEmailSerializer(data=request.data)
@@ -39,6 +53,11 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer.save()
         return Response({'detail': 'Email подтвержден.'})
 
+    @extend_schema(
+        tags=('Авторизация',),
+        request=ResendVerificationSerializer,
+        responses={200: DetailResponseSerializer},
+    )
     @action(
         detail=False,
         methods=('post',),
@@ -57,6 +76,11 @@ class AuthViewSet(viewsets.GenericViewSet):
             }
         )
 
+    @extend_schema(
+        tags=('Авторизация',),
+        request=LoginSerializer,
+        responses={200: TokenPairResponseSerializer},
+    )
     @action(detail=False, methods=('post',))
     def login(self, request):
         serializer = LoginSerializer(
@@ -66,12 +90,22 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         return Response(serializer.validated_data)
 
+    @extend_schema(
+        tags=('Авторизация',),
+        request=RefreshSerializer,
+        responses={200: TokenPairResponseSerializer},
+    )
     @action(detail=False, methods=('post',))
     def refresh(self, request):
         serializer = RefreshSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(serializer.validated_data)
 
+    @extend_schema(
+        tags=('Авторизация',),
+        request=LogoutSerializer,
+        responses={204: OpenApiResponse(description='Выход выполнен.')},
+    )
     @action(detail=False, methods=('post',))
     def logout(self, request):
         serializer = LogoutSerializer(data=request.data)

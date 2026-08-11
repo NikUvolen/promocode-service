@@ -131,3 +131,16 @@ class LogoutSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {'refresh': 'Refresh-токен недействителен.'}
             ) from exc
+
+
+class DetailResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+class RegistrationResponseSerializer(DetailResponseSerializer):
+    email = serializers.EmailField()
+
+
+class TokenPairResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()

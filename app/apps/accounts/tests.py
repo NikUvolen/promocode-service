@@ -162,7 +162,6 @@ class JwtAuthApiTests(TestCase):
         data = {
             'email': 'user@example.com',
             'password': 'StrongPassword_123!',
-            'personal_data_consent': True,
         }
         data.update(overrides)
         return self.client.post(
@@ -181,7 +180,6 @@ class JwtAuthApiTests(TestCase):
         self.assertIn('refresh', response.json())
         user.refresh_from_db()
         self.assertIsNotNone(user.last_login)
-        self.assertIsNotNone(user.profile.personal_data_consent_at)
 
     def test_login_rejects_invalid_credentials(self):
         self.create_user()
@@ -195,14 +193,6 @@ class JwtAuthApiTests(TestCase):
         self.create_user(is_email_verified=False)
 
         response = self.login()
-
-        self.assertEqual(response.status_code, 400)
-        self.assertNotIn('access', response.json())
-
-    def test_login_requires_personal_data_consent(self):
-        self.create_user()
-
-        response = self.login(personal_data_consent=False)
 
         self.assertEqual(response.status_code, 400)
         self.assertNotIn('access', response.json())

@@ -83,7 +83,6 @@ class ResendVerificationSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
-    personal_data_consent = serializers.BooleanField(write_only=True)
 
     def validate(self, attrs):
         try:
@@ -98,14 +97,6 @@ class LoginSerializer(serializers.Serializer):
         except EmailNotVerified as exc:
             raise serializers.ValidationError(
                 'Сначала подтвердите email.'
-            ) from exc
-        except PersonalDataConsentRequired as exc:
-            raise serializers.ValidationError(
-                {
-                    'personal_data_consent': (
-                        'Необходимо согласие на обработку персональных данных.'
-                    )
-                }
             ) from exc
 
         return create_token_pair(user)

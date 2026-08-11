@@ -1,11 +1,9 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
-from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from accounts.models import Profile, User
-from accounts.services.registration import PersonalDataConsentRequired
+from accounts.models import User
 
 
 class InvalidCredentials(Exception):
@@ -20,10 +18,7 @@ class InvalidRefreshToken(Exception):
     pass
 
 
-def authenticate_user(*, request, email, password, personal_data_consent):
-    if not personal_data_consent:
-        raise PersonalDataConsentRequired
-
+def authenticate_user(*, request, email, password):
     normalized_email = User.objects.normalize_email(email).lower()
     user = authenticate(
         request=request,
@@ -34,11 +29,6 @@ def authenticate_user(*, request, email, password, personal_data_consent):
         raise InvalidCredentials
     if not user.is_email_verified:
         raise EmailNotVerified
-
-    profile, _ = Profile.objects.get_or_create(user=user)
-    if profile.personal_data_consent_at is None:
-        profile.personal_data_consent_at = timezone.now()
-        profile.save(update_fields=('personal_data_consent_at', 'updated_at'))
 
     return user
 

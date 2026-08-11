@@ -165,6 +165,10 @@ EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', False)
 EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
 EMAIL_TIMEOUT = int(getenv('EMAIL_TIMEOUT', '10'))
 DEFAULT_FROM_EMAIL = getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+FRONTEND_URL = getenv('FRONTEND_URL', 'http://localhost:3000')
+EMAIL_VERIFICATION_TIMEOUT = int(
+    getenv('EMAIL_VERIFICATION_TIMEOUT', str(24 * 60 * 60))
+)
 
 
 # Celery

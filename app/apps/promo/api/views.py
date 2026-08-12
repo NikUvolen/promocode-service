@@ -1,3 +1,8 @@
+from zoneinfo import ZoneInfo
+
+from django.conf import settings
+from django.db.models import Exists, OuterRef
+from django.db.models.functions import TruncDate
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -5,6 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from draws.models import Draw, Winner
 from promo.models import PromoCode
 from promo.services.registration import (
     ProfileIncomplete,
@@ -24,7 +30,7 @@ from .serializers import (
 
 
 class PromoCodePagination(PageNumberPagination):
-    page_size = 20
+    page_size = 10
     max_page_size = 100
 
 
@@ -34,9 +40,29 @@ class PromoCodeViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     pagination_class = PromoCodePagination
 
     def get_queryset(self):
-        return PromoCode.objects.filter(
-            registered_by=self.request.user,
-        ).order_by('-registered_at')
+        return (
+            PromoCode.objects.filter(registered_by=self.request.user)
+            .annotate(
+                registration_draw_date=TruncDate(
+                    'registered_at',
+                    tzinfo=ZoneInfo(settings.TIME_ZONE),
+                )
+            )
+            .annotate(
+                has_won=Exists(
+                    Winner.objects.filter(promo_code_id=OuterRef('pk'))
+                ),
+                draw_completed=Exists(
+                    Draw.objects.filter(
+                        draw_date=OuterRef('registration_draw_date'),
+                        status=Draw.Status.COMPLETED,
+                        completed_at__gte=OuterRef('registered_at'),
+                    )
+                ),
+            )
+            .select_related('winner')
+            .order_by('-registered_at')
+        )
 
     @extend_schema(
         tags=('Промокоды',),
@@ -93,6 +119,9 @@ class PromoCodeViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             )
 
         return Response(
-            PromoCodeSerializer(promo_code).data,
+            PromoCodeSerializer(
+                promo_code,
+                context=self.get_serializer_context(),
+            ).data,
             status=status.HTTP_201_CREATED,
         )

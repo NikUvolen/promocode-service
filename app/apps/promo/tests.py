@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from accounts.models import Profile, User
 from accounts.services.authentication import create_token_pair
+from draws.models import Draw, Winner
 from promo.models import PromoCode, PromoCodeAttempt, PromoCodeGeneration
 from promo.services.notifications import send_registration_email
 from promo.tasks import generate_promo_codes_task
@@ -466,6 +468,92 @@ class PromoCodeApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['count'], 1)
         self.assertEqual(response.json()['results'][0]['code'], 'AB12CD34')
+
+    def test_lists_participating_lost_and_winning_statuses(self):
+        completed_at = timezone.now() - timedelta(days=1)
+        draw = Draw.objects.create(
+            draw_date=timezone.localdate(completed_at),
+            status=Draw.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+        lost_code = PromoCode.objects.create(
+            code='LOST1234',
+            registered_by=self.user,
+            registered_at=completed_at,
+        )
+        winning_code = PromoCode.objects.create(
+            code='WON12345',
+            registered_by=self.user,
+            registered_at=completed_at,
+        )
+        current_time = timezone.now()
+        Draw.objects.create(
+            draw_date=timezone.localdate(current_time),
+            status=Draw.Status.COMPLETED,
+            completed_at=current_time - timedelta(hours=1),
+            trigger=Draw.Trigger.MANUAL,
+        )
+        participating_code = PromoCode.objects.create(
+            code='PLAY1234',
+            registered_by=self.user,
+            registered_at=current_time,
+        )
+        Winner.objects.create(
+            draw=draw,
+            user=self.user,
+            promo_code=winning_code,
+            prize=Winner.Prize.AIRPODS,
+        )
+
+        response = self.client.get(
+            self.list_url,
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        codes = {
+            item['code']: item for item in response.json()['results']
+        }
+        self.assertEqual(codes[lost_code.code]['status'], 'not_won')
+        self.assertIsNone(codes[lost_code.code]['prize'])
+        self.assertEqual(codes[winning_code.code]['status'], 'won')
+        self.assertEqual(
+            codes[winning_code.code]['prize'],
+            {'code': Winner.Prize.AIRPODS, 'name': 'AirPods'},
+        )
+        self.assertEqual(
+            codes[participating_code.code]['status'],
+            'participating',
+        )
+
+    def test_paginates_user_codes_by_ten(self):
+        PromoCode.objects.bulk_create(
+            [
+                PromoCode(
+                    code=f'CD{index:06d}',
+                    registered_by=self.user,
+                    registered_at=timezone.now(),
+                )
+                for index in range(12)
+            ]
+        )
+
+        first_page = self.client.get(
+            self.list_url,
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+        second_page = self.client.get(
+            f'{self.list_url}?page=2',
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.json()['count'], 12)
+        self.assertEqual(len(first_page.json()['results']), 10)
+        self.assertIsNotNone(first_page.json()['next'])
+        self.assertEqual(second_page.status_code, 200)
+        self.assertEqual(len(second_page.json()['results']), 2)
+        self.assertIsNone(second_page.json()['next'])
 
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',

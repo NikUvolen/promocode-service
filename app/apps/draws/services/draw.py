@@ -35,6 +35,8 @@ def get_draw_period(draw_date, cutoff=None):
 
 
 def run_draw(*, draw_date, trigger, cutoff=None):
+    if trigger == Draw.Trigger.MANUAL and cutoff is None:
+        cutoff = timezone.now()
     starts_at, ends_at = get_draw_period(draw_date, cutoff)
 
     with transaction.atomic():

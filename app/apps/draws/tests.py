@@ -1,17 +1,20 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from threading import Barrier
+from types import SimpleNamespace
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.db import connections, IntegrityError, transaction
 from django.test import TestCase, TransactionTestCase
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Profile, User
 from draws.models import Draw, Winner
 from draws.services.draw import InvalidDrawPeriod, run_draw
+from draws.tasks import run_daily_draw_task
 from promo.models import PromoCode
 
 
@@ -150,9 +153,11 @@ class DrawServiceTests(TransactionTestCase):
     def test_repeat_run_returns_existing_result(self):
         self.create_participant(1)
         self.create_participant(2)
+        cutoff = datetime(2026, 8, 12, 23, 0, tzinfo=self.moscow)
         first_draw = run_draw(
             draw_date=self.draw_date,
             trigger=Draw.Trigger.MANUAL,
+            cutoff=cutoff,
         )
         winner_ids = list(
             first_draw.winners.order_by('pk').values_list('pk', flat=True)
@@ -260,3 +265,50 @@ class DrawConstraintTests(TransactionTestCase):
                 promo_code=promo_code,
                 prize='Ozon3000',
             )
+
+
+class DailyDrawTaskTests(TestCase):
+    @patch('draws.tasks.run_draw')
+    @patch('draws.tasks.timezone.now')
+    def test_draws_previous_moscow_date(self, now, draw_service):
+        now.return_value = datetime(
+            2026,
+            8,
+            11,
+            21,
+            0,
+            tzinfo=ZoneInfo('UTC'),
+        )
+        draw_service.return_value = SimpleNamespace(
+            pk=42,
+            draw_date=datetime(2026, 8, 11).date(),
+            winners=SimpleNamespace(count=lambda: 2),
+        )
+
+        result = run_daily_draw_task()
+
+        draw_service.assert_called_once_with(
+            draw_date=datetime(2026, 8, 11).date(),
+            trigger=Draw.Trigger.AUTOMATIC,
+        )
+        self.assertEqual(
+            result,
+            {
+                'draw_id': 42,
+                'draw_date': '2026-08-11',
+                'winner_count': 2,
+            },
+        )
+
+    @override_settings(TIME_ZONE='Europe/Moscow')
+    def test_beat_runs_at_moscow_midnight(self):
+        from django.conf import settings
+
+        entry = settings.CELERY_BEAT_SCHEDULE[
+            'run-daily-draw-at-moscow-midnight'
+        ]
+
+        self.assertEqual(entry['task'], 'draws.tasks.run_daily_draw_task')
+        self.assertEqual(entry['schedule'].hour, {0})
+        self.assertEqual(entry['schedule'].minute, {0})
+        self.assertEqual(entry['options']['expires'], 3600)

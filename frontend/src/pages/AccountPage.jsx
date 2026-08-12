@@ -1,5 +1,5 @@
-import { KeyRound, LogOut, TicketCheck } from 'lucide-react'
-import { useState } from 'react'
+import { CheckCircle2, KeyRound, LogOut, TicketCheck, UserRound } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { apiRequest } from '../api'
@@ -13,38 +13,128 @@ import { fieldError } from '../form'
 export default function AccountPage() {
   const { logout, clearSession } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ old_password: '', new_password: '', confirmation: '' })
-  const [error, setError] = useState(null)
-  const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [profile, setProfile] = useState({
+    email: '',
+    first_name: '',
+    last_name: '',
+    middle_name: '',
+    no_middle_name: false,
+    phone: '',
+    is_complete: false,
+  })
+  const [profileState, setProfileState] = useState({
+    loading: true,
+    saving: false,
+    error: null,
+    message: '',
+  })
+  const [passwordForm, setPasswordForm] = useState({
+    old_password: '',
+    new_password: '',
+    confirmation: '',
+  })
+  const [passwordError, setPasswordError] = useState(null)
+  const [passwordLoading, setPasswordLoading] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    apiRequest('profile', { auth: true })
+      .then((data) => {
+        if (active) {
+          setProfile(data)
+          setProfileState((current) => ({ ...current, loading: false }))
+        }
+      })
+      .catch((requestError) => {
+        if (!active) return
+        if (requestError.status === 401) {
+          clearSession()
+          navigate('/login', { replace: true })
+          return
+        }
+        setProfileState((current) => ({
+          ...current,
+          loading: false,
+          error: requestError,
+        }))
+      })
+
+    return () => {
+      active = false
+    }
+  }, [clearSession, navigate])
 
   async function handleLogout() {
     await logout()
     navigate('/')
   }
 
-  async function handleSubmit(event) {
+  async function handleProfileSubmit(event) {
     event.preventDefault()
-    setError(null)
-    setMessage('')
-    if (form.new_password !== form.confirmation) {
-      setError({ message: 'Пароли не совпадают.', localConfirmation: true })
+    setProfileState((current) => ({
+      ...current,
+      saving: true,
+      error: null,
+      message: '',
+    }))
+    try {
+      const updatedProfile = await apiRequest('profile', {
+        method: 'PATCH',
+        auth: true,
+        body: JSON.stringify({
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          middle_name: profile.middle_name,
+          no_middle_name: profile.no_middle_name,
+          phone: profile.phone,
+        }),
+      })
+      setProfile(updatedProfile)
+      setProfileState({
+        loading: false,
+        saving: false,
+        error: null,
+        message: 'Данные профиля сохранены.',
+      })
+    } catch (requestError) {
+      setProfileState((current) => ({
+        ...current,
+        saving: false,
+        error: requestError,
+      }))
+    }
+  }
+
+  async function handlePasswordSubmit(event) {
+    event.preventDefault()
+    setPasswordError(null)
+    if (passwordForm.new_password !== passwordForm.confirmation) {
+      setPasswordError({ message: 'Пароли не совпадают.', localConfirmation: true })
       return
     }
-    setLoading(true)
+    setPasswordLoading(true)
     try {
       await apiRequest('change-password', {
         method: 'POST',
         auth: true,
-        body: JSON.stringify({ old_password: form.old_password, new_password: form.new_password }),
+        body: JSON.stringify({
+          old_password: passwordForm.old_password,
+          new_password: passwordForm.new_password,
+        }),
       })
       clearSession()
       navigate('/login', { replace: true, state: { message: 'Пароль изменен. Войдите заново.' } })
     } catch (requestError) {
-      setError(requestError)
+      setPasswordError(requestError)
     } finally {
-      setLoading(false)
+      setPasswordLoading(false)
     }
+  }
+
+  function updateProfile(field, value) {
+    setProfile((current) => ({ ...current, [field]: value }))
+    setProfileState((current) => ({ ...current, error: null, message: '' }))
   }
 
   return (
@@ -58,25 +148,68 @@ export default function AccountPage() {
       <main className="account-main">
         <section className="account-intro">
           <p className="eyebrow">Личный кабинет</p>
-          <h1>Добро пожаловать в игру</h1>
-          <p>Следующий шаг — заполнить профиль и зарегистрировать первый промокод.</p>
+          <h1>Профиль участника</h1>
+          <p>Эти данные понадобятся организатору, если ваш промокод победит.</p>
         </section>
         <section className="account-grid">
-          <article className="account-placeholder">
-            <span className="account-placeholder__icon"><TicketCheck size={26} /></span>
-            <div><h2>Промокоды</h2><p>Раздел появится на следующем этапе разработки.</p></div>
-          </article>
-          <section className="password-panel">
-            <div className="panel-heading"><KeyRound size={23} /><div><h2>Смена пароля</h2><p>После смены потребуется войти заново.</p></div></div>
-            {message && <StatusMessage type="success">{message}</StatusMessage>}
-            {error && !fieldError(error, 'old_password') && !fieldError(error, 'new_password') && !error.localConfirmation && <StatusMessage type="error">{error.message}</StatusMessage>}
-            <form className="auth-form" onSubmit={handleSubmit}>
-              <FormField id="old-password" label="Текущий пароль" type="password" autoComplete="current-password" value={form.old_password} error={fieldError(error, 'old_password')} onChange={(event) => setForm({ ...form, old_password: event.target.value })} required />
-              <FormField id="account-new-password" label="Новый пароль" type="password" autoComplete="new-password" value={form.new_password} error={fieldError(error, 'new_password')} onChange={(event) => setForm({ ...form, new_password: event.target.value })} required />
-              <FormField id="account-password-confirmation" label="Повторите новый пароль" type="password" autoComplete="new-password" value={form.confirmation} error={error?.localConfirmation ? error.message : ''} onChange={(event) => setForm({ ...form, confirmation: event.target.value })} required />
-              <SubmitButton loading={loading}>Изменить пароль</SubmitButton>
-            </form>
+          <section className="profile-panel">
+            <div className="panel-heading profile-panel__heading">
+              <UserRound size={23} />
+              <div>
+                <h2>Личные данные</h2>
+                <p>{profile.is_complete ? 'Профиль заполнен' : 'Заполните все обязательные поля'}</p>
+              </div>
+              {profile.is_complete && <CheckCircle2 className="profile-complete-icon" size={22} aria-label="Профиль заполнен" />}
+            </div>
+
+            {profileState.loading ? (
+              <div className="profile-loading" role="status">Загружаем данные...</div>
+            ) : (
+              <form className="profile-form" onSubmit={handleProfileSubmit}>
+                {profileState.message && <StatusMessage type="success">{profileState.message}</StatusMessage>}
+                {profileState.error && !['first_name', 'last_name', 'middle_name', 'phone'].some((field) => fieldError(profileState.error, field)) && (
+                  <StatusMessage type="error">{profileState.error.message}</StatusMessage>
+                )}
+                <FormField id="profile-email" label="Email" type="email" value={profile.email} disabled />
+                <div className="profile-form__row">
+                  <FormField id="last-name" label="Фамилия" autoComplete="family-name" value={profile.last_name} error={fieldError(profileState.error, 'last_name')} onChange={(event) => updateProfile('last_name', event.target.value)} required />
+                  <FormField id="first-name" label="Имя" autoComplete="given-name" value={profile.first_name} error={fieldError(profileState.error, 'first_name')} onChange={(event) => updateProfile('first_name', event.target.value)} required />
+                </div>
+                <FormField id="middle-name" label="Отчество" autoComplete="additional-name" value={profile.middle_name} error={fieldError(profileState.error, 'middle_name')} disabled={profile.no_middle_name} onChange={(event) => updateProfile('middle_name', event.target.value)} required={!profile.no_middle_name} />
+                <label className="checkbox-field profile-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={profile.no_middle_name}
+                    onChange={(event) => {
+                      updateProfile('no_middle_name', event.target.checked)
+                      if (event.target.checked) updateProfile('middle_name', '')
+                    }}
+                  />
+                  <span className="checkbox-field__box" aria-hidden="true" />
+                  <span>Нет отчества</span>
+                </label>
+                <FormField id="phone" label="Телефон" type="tel" autoComplete="tel" placeholder="+7 (999) 123-45-67" value={profile.phone} error={fieldError(profileState.error, 'phone')} onChange={(event) => updateProfile('phone', event.target.value)} required />
+                <SubmitButton loading={profileState.saving}>Сохранить профиль</SubmitButton>
+              </form>
+            )}
           </section>
+
+          <aside className="account-sidebar">
+            <article className="account-placeholder">
+              <span className="account-placeholder__icon"><TicketCheck size={26} /></span>
+              <div><h2>Промокоды</h2><p>{profile.is_complete ? 'Профиль готов. Скоро здесь можно будет вводить коды.' : 'Сначала заполните профиль, чтобы регистрировать коды.'}</p></div>
+            </article>
+            <section className="password-panel">
+              <div className="panel-heading"><KeyRound size={23} /><div><h2>Смена пароля</h2><p>После смены потребуется войти заново.</p></div></div>
+              {passwordError && !fieldError(passwordError, 'old_password') && !fieldError(passwordError, 'new_password') && !passwordError.localConfirmation && <StatusMessage type="error">{passwordError.message}</StatusMessage>}
+              <form className="auth-form" onSubmit={handlePasswordSubmit}>
+                <FormField id="old-password" label="Текущий пароль" type="password" autoComplete="current-password" value={passwordForm.old_password} error={fieldError(passwordError, 'old_password')} onChange={(event) => setPasswordForm({ ...passwordForm, old_password: event.target.value })} required />
+                <FormField id="account-new-password" label="Новый пароль" type="password" autoComplete="new-password" value={passwordForm.new_password} error={fieldError(passwordError, 'new_password')} onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })} required />
+                <FormField id="account-password-confirmation" label="Повторите новый пароль" type="password" autoComplete="new-password" value={passwordForm.confirmation} error={passwordError?.localConfirmation ? passwordError.message : ''} onChange={(event) => setPasswordForm({ ...passwordForm, confirmation: event.target.value })} required />
+                <SubmitButton loading={passwordLoading}>Изменить пароль</SubmitButton>
+              </form>
+            </section>
+          </aside>
         </section>
       </main>
     </div>

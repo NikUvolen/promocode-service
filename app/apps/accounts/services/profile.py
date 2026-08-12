@@ -3,6 +3,22 @@ from django.db import transaction
 from accounts.models import Profile
 
 
+def normalize_phone(phone: str) -> str:
+    digits = ''.join(character for character in phone if character.isdigit())
+    if len(digits) == 10:
+        digits = f'7{digits}'
+    elif len(digits) == 11 and digits.startswith('8'):
+        digits = f'7{digits[1:]}'
+
+    if len(digits) != 11 or not digits.startswith('7'):
+        raise ValueError('Invalid Russian phone number')
+
+    return (
+        f'+7 ({digits[1:4]}) {digits[4:7]}-'
+        f'{digits[7:9]}-{digits[9:11]}'
+    )
+
+
 @transaction.atomic
 def update_profile(
     *,

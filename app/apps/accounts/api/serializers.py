@@ -28,7 +28,7 @@ from accounts.services.passwords import (
     change_password,
     reset_password,
 )
-from accounts.services.profile import update_profile
+from accounts.services.profile import normalize_phone, update_profile
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -222,18 +222,11 @@ class ProfileSerializer(serializers.Serializer):
                 'Укажите отчество или отметьте, что его нет.'
             )
 
-        phone_digits = ''.join(
-            character for character in values['phone'] if character.isdigit()
-        )
-        allowed_phone_characters = set('+0123456789 ()-')
-        if values['phone'] and (
-            not 10 <= len(phone_digits) <= 15
-            or any(
-                character not in allowed_phone_characters
-                for character in values['phone']
-            )
-        ):
-            errors['phone'] = 'Введите корректный номер телефона.'
+        if values['phone']:
+            try:
+                values['phone'] = normalize_phone(values['phone'])
+            except ValueError:
+                errors['phone'] = 'Введите российский номер из 10 цифр.'
 
         if errors:
             raise serializers.ValidationError(errors)

@@ -463,6 +463,23 @@ class ProfileApiTests(TestCase):
         self.assertEqual(self.profile.middle_name, '')
         self.assertTrue(self.profile.no_middle_name)
 
+    def test_normalizes_phone_number(self):
+        response = self.request(
+            'patch',
+            {
+                'first_name': 'Михаил',
+                'last_name': 'Иванов',
+                'middle_name': 'Сергеевич',
+                'no_middle_name': False,
+                'phone': '8 800 555 35 35',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['phone'], '+7 (800) 555-35-35')
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.phone, '+7 (800) 555-35-35')
+
     def test_rejects_incomplete_profile(self):
         response = self.request(
             'patch',
@@ -478,4 +495,19 @@ class ProfileApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('first_name', response.json())
         self.assertIn('middle_name', response.json())
+        self.assertIn('phone', response.json())
+
+    def test_rejects_non_russian_phone(self):
+        response = self.request(
+            'patch',
+            {
+                'first_name': 'Михаил',
+                'last_name': 'Иванов',
+                'middle_name': 'Сергеевич',
+                'no_middle_name': False,
+                'phone': '+1 202 555 0100',
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
         self.assertIn('phone', response.json())

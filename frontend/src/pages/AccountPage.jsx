@@ -1,4 +1,4 @@
-import { CheckCircle2, KeyRound, LogOut, UserRound } from 'lucide-react'
+import { CheckCircle2, KeyRound, LogOut, Mail, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -37,6 +37,15 @@ export default function AccountPage() {
   })
   const [passwordError, setPasswordError] = useState(null)
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [notificationSettings, setNotificationSettings] = useState({
+    promo_code_email_notifications: true,
+  })
+  const [notificationState, setNotificationState] = useState({
+    loading: true,
+    saving: false,
+    error: null,
+    message: '',
+  })
 
   useEffect(() => {
     let active = true
@@ -56,6 +65,26 @@ export default function AccountPage() {
           return
         }
         setProfileState((current) => ({
+          ...current,
+          loading: false,
+          error: requestError,
+        }))
+      })
+
+    apiRequest('notification-settings', { auth: true })
+      .then((data) => {
+        if (!active) return
+        setNotificationSettings(data)
+        setNotificationState((current) => ({ ...current, loading: false }))
+      })
+      .catch((requestError) => {
+        if (!active) return
+        if (requestError.status === 401) {
+          clearSession()
+          navigate('/login', { replace: true })
+          return
+        }
+        setNotificationState((current) => ({
           ...current,
           loading: false,
           error: requestError,
@@ -145,6 +174,39 @@ export default function AccountPage() {
     }
   }
 
+  async function handleNotificationChange(event) {
+    const enabled = event.target.checked
+    setNotificationState({
+      loading: false,
+      saving: true,
+      error: null,
+      message: '',
+    })
+    try {
+      const updatedSettings = await apiRequest('notification-settings', {
+        method: 'PATCH',
+        auth: true,
+        body: JSON.stringify({
+          promo_code_email_notifications: enabled,
+        }),
+      })
+      setNotificationSettings(updatedSettings)
+      setNotificationState({
+        loading: false,
+        saving: false,
+        error: null,
+        message: 'Настройка сохранена.',
+      })
+    } catch (requestError) {
+      setNotificationState({
+        loading: false,
+        saving: false,
+        error: requestError,
+        message: '',
+      })
+    }
+  }
+
   function updateProfile(field, value) {
     setProfile((current) => ({ ...current, [field]: value }))
     setProfileState((current) => ({ ...current, error: null, message: '' }))
@@ -209,6 +271,29 @@ export default function AccountPage() {
           </section>
 
           <aside className="account-sidebar">
+            <section className="settings-panel">
+              <div className="panel-heading"><Mail size={23} /><div><h2>Уведомления</h2><p>Управляйте необязательными письмами.</p></div></div>
+              {notificationState.error && <StatusMessage type="error">{notificationState.error.message}</StatusMessage>}
+              {notificationState.message && <StatusMessage type="success">{notificationState.message}</StatusMessage>}
+              <label className="notification-setting">
+                <span>
+                  <strong>Регистрация промокода</strong>
+                  <small>Отправлять письмо после успешного добавления кода.</small>
+                </span>
+                <span className="switch-field">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="Письма о регистрации промокода"
+                    checked={notificationSettings.promo_code_email_notifications}
+                    disabled={notificationState.loading || notificationState.saving}
+                    onChange={handleNotificationChange}
+                  />
+                  <span className="switch-field__track" aria-hidden="true" />
+                </span>
+              </label>
+              <p className="settings-panel__note">Письмо о выигрыше отправляется всегда.</p>
+            </section>
             <section className="password-panel">
               <div className="panel-heading"><KeyRound size={23} /><div><h2>Смена пароля</h2><p>После смены потребуется войти заново.</p></div></div>
               {passwordError && !fieldError(passwordError, 'old_password') && !fieldError(passwordError, 'new_password') && !passwordError.localConfirmation && <StatusMessage type="error">{passwordError.message}</StatusMessage>}

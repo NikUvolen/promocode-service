@@ -524,3 +524,46 @@ class ProfileApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('phone', response.json())
+
+
+class NotificationSettingsApiTests(TestCase):
+    settings_url = reverse('auth-notification-settings')
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='user@example.com',
+            password='StrongPassword_123!',
+            is_email_verified=True,
+        )
+        self.profile = Profile.objects.create(user=self.user)
+        self.tokens = create_token_pair(self.user)
+
+    def request(self, method='get', data=None):
+        return getattr(self.client, method)(
+            self.settings_url,
+            data=data,
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+
+    def test_requires_authentication(self):
+        response = self.client.get(self.settings_url)
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_returns_enabled_setting_by_default(self):
+        response = self.request()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['promo_code_email_notifications'])
+
+    def test_disables_promo_code_registration_emails(self):
+        response = self.request(
+            'patch',
+            {'promo_code_email_notifications': False},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['promo_code_email_notifications'])
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.promo_code_email_notifications)

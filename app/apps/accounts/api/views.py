@@ -14,6 +14,7 @@ from .serializers import (
     DetailResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
+    NotificationSettingsSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     ProfileSerializer,
@@ -164,6 +165,31 @@ class AuthViewSet(viewsets.GenericViewSet):
             serializer.save()
         else:
             serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
+
+    @extend_schema(
+        tags=('Настройки',),
+        request=NotificationSettingsSerializer,
+        responses={200: NotificationSettingsSerializer},
+    )
+    @action(
+        detail=False,
+        methods=('get', 'patch'),
+        url_path='notification-settings',
+        authentication_classes=(JWTAuthentication,),
+        permission_classes=(IsAuthenticated,),
+    )
+    def notification_settings(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if request.method == 'PATCH':
+            serializer = NotificationSettingsSerializer(
+                profile,
+                data=request.data,
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+        else:
+            serializer = NotificationSettingsSerializer(profile)
         return Response(serializer.data)
 
     @extend_schema(

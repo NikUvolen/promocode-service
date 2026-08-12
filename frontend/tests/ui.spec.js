@@ -11,6 +11,7 @@ const emptyProfile = {
 }
 
 async function mockProfileApi(page, currentProfile = emptyProfile) {
+  let promoCodeEmailNotifications = true
   await page.route('**/api/v1/auth/profile/', async (route) => {
     if (route.request().method() === 'PATCH') {
       const requestProfile = route.request().postDataJSON()
@@ -24,6 +25,16 @@ async function mockProfileApi(page, currentProfile = emptyProfile) {
       return
     }
     await route.fulfill({ json: currentProfile })
+  })
+  await page.route('**/api/v1/auth/notification-settings/', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      promoCodeEmailNotifications = route.request().postDataJSON().promo_code_email_notifications
+    }
+    await route.fulfill({
+      json: {
+        promo_code_email_notifications: promoCodeEmailNotifications,
+      },
+    })
   })
 }
 
@@ -164,6 +175,11 @@ test('profile can be viewed and updated', async ({ page }, testInfo) => {
 
   await expect(page.getByText('Данные профиля сохранены.')).toBeVisible()
   await expect(page.getByLabel('Профиль заполнен')).toBeVisible()
+  const notificationSwitch = page.getByRole('switch', { name: 'Письма о регистрации промокода' })
+  await expect(notificationSwitch).toBeChecked()
+  await notificationSwitch.click()
+  await expect(notificationSwitch).not.toBeChecked()
+  await expect(page.getByText('Настройка сохранена.')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('profile.png'), fullPage: true })
 })
 

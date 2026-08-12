@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from accounts.models import Profile
 from accounts.services.registration import resend_verification_email
 from accounts.services.passwords import request_password_reset
 
@@ -15,6 +16,7 @@ from .serializers import (
     LogoutSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    ProfileSerializer,
     RefreshSerializer,
     RegistrationResponseSerializer,
     RegisterSerializer,
@@ -136,6 +138,33 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        tags=('Профиль',),
+        request=ProfileSerializer,
+        responses={200: ProfileSerializer},
+    )
+    @action(
+        detail=False,
+        methods=('get', 'patch'),
+        authentication_classes=(JWTAuthentication,),
+        permission_classes=(IsAuthenticated,),
+    )
+    def profile(self, request):
+        profile, _ = Profile.objects.get_or_create(
+            user=request.user,
+        )
+        if request.method == 'PATCH':
+            serializer = ProfileSerializer(
+                profile,
+                data=request.data,
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+        else:
+            serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
 
     @extend_schema(
         tags=('Авторизация',),

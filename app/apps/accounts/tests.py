@@ -4,6 +4,7 @@ from django.core import mail
 from django.test import override_settings
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Profile, User
 from .services.email_verification import (
@@ -388,3 +389,93 @@ class ChangePasswordApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('OldPassword_123!'))
+
+
+class ProfileApiTests(TestCase):
+    profile_url = reverse('auth-profile')
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='user@example.com',
+            password='StrongPassword_123!',
+            is_email_verified=True,
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            personal_data_consent_at=timezone.now(),
+        )
+        self.tokens = create_token_pair(self.user)
+
+    def request(self, method='get', data=None):
+        return getattr(self.client, method)(
+            self.profile_url,
+            data=data,
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+
+    def test_requires_authentication(self):
+        response = self.client.get(self.profile_url)
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_returns_current_profile(self):
+        response = self.request()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['email'], self.user.email)
+        self.assertFalse(response.json()['is_complete'])
+
+    def test_updates_and_completes_profile(self):
+        response = self.request(
+            'patch',
+            {
+                'first_name': ' Михаил ',
+                'last_name': 'Иванов',
+                'middle_name': 'Сергеевич',
+                'no_middle_name': False,
+                'phone': '+7 (999) 123-45-67',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.first_name, 'Михаил')
+        self.assertTrue(response.json()['is_complete'])
+
+    def test_clears_middle_name_when_absent(self):
+        self.profile.middle_name = 'Сергеевич'
+        self.profile.save()
+
+        response = self.request(
+            'patch',
+            {
+                'first_name': 'Михаил',
+                'last_name': 'Иванов',
+                'middle_name': 'Не должно сохраниться',
+                'no_middle_name': True,
+                'phone': '+79991234567',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.middle_name, '')
+        self.assertTrue(self.profile.no_middle_name)
+
+    def test_rejects_incomplete_profile(self):
+        response = self.request(
+            'patch',
+            {
+                'first_name': '',
+                'last_name': 'Иванов',
+                'middle_name': '',
+                'no_middle_name': False,
+                'phone': '123',
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('first_name', response.json())
+        self.assertIn('middle_name', response.json())
+        self.assertIn('phone', response.json())

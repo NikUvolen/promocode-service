@@ -1,4 +1,4 @@
-import { CheckCircle2, KeyRound, LogOut, TicketCheck, UserRound } from 'lucide-react'
+import { CheckCircle2, KeyRound, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -7,6 +7,7 @@ import { useAuth } from '../auth'
 import Brand from '../components/Brand'
 import FormField from '../components/FormField'
 import PhoneField, { isCompleteRussianPhone } from '../components/PhoneField'
+import PromoCodesPanel from '../components/PromoCodesPanel'
 import StatusMessage from '../components/StatusMessage'
 import SubmitButton from '../components/SubmitButton'
 import { fieldError } from '../form'
@@ -160,11 +161,12 @@ export default function AccountPage() {
       <main className="account-main">
         <section className="account-intro">
           <p className="eyebrow">Личный кабинет</p>
-          <h1>Профиль участника</h1>
-          <p>Эти данные понадобятся организатору, если ваш промокод победит.</p>
+          <h1>Личный кабинет</h1>
+          <p>Регистрируйте промокоды и следите за своим участием.</p>
         </section>
+        {!profileState.loading && <PromoCodesPanel profileComplete={profile.is_complete} />}
         <section className="account-grid">
-          <section className="profile-panel">
+          <section className="profile-panel" id="profile">
             <div className="panel-heading profile-panel__heading">
               <UserRound size={23} />
               <div>
@@ -207,10 +209,6 @@ export default function AccountPage() {
           </section>
 
           <aside className="account-sidebar">
-            <article className="account-placeholder">
-              <span className="account-placeholder__icon"><TicketCheck size={26} /></span>
-              <div><h2>Промокоды</h2><p>{profile.is_complete ? 'Профиль готов. Скоро здесь можно будет вводить коды.' : 'Сначала заполните профиль, чтобы регистрировать коды.'}</p></div>
-            </article>
             <section className="password-panel">
               <div className="panel-heading"><KeyRound size={23} /><div><h2>Смена пароля</h2><p>После смены потребуется войти заново.</p></div></div>
               {passwordError && !fieldError(passwordError, 'old_password') && !fieldError(passwordError, 'new_password') && !passwordError.localConfirmation && <StatusMessage type="error">{passwordError.message}</StatusMessage>}

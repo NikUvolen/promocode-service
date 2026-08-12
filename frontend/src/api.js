@@ -1,4 +1,4 @@
-const API_ROOT = '/api/v1/auth'
+const API_ROOT = '/api/v1'
 const TOKEN_KEY = 'gear-drop.tokens'
 
 export class ApiError extends Error {
@@ -47,7 +47,7 @@ async function refreshAccessToken() {
   const tokens = getTokens()
   if (!tokens?.refresh) return null
 
-  const response = await fetch(`${API_ROOT}/refresh/`, {
+  const response = await fetch(`${API_ROOT}/auth/refresh/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh: tokens.refresh }),
@@ -63,7 +63,7 @@ async function refreshAccessToken() {
   return nextTokens.access
 }
 
-export async function apiRequest(path, options = {}) {
+async function request(endpoint, options = {}) {
   const { auth = false, retry = true, ...fetchOptions } = options
   const headers = {
     'Content-Type': 'application/json',
@@ -75,17 +75,26 @@ export async function apiRequest(path, options = {}) {
     if (access) headers.Authorization = `Bearer ${access}`
   }
 
-  const response = await fetch(`${API_ROOT}/${path}/`, {
+  const response = await fetch(`${API_ROOT}/${endpoint}/`, {
     ...fetchOptions,
     headers,
   })
 
   if (response.status === 401 && auth && retry) {
     const access = await refreshAccessToken()
-    if (access) return apiRequest(path, { ...options, retry: false })
+    if (access) return request(endpoint, { ...options, retry: false })
   }
 
   const payload = await parseResponse(response)
   if (!response.ok) throw new ApiError(payload, response.status)
   return payload
+}
+
+export function apiRequest(path, options = {}) {
+  return request(`auth/${path}`, options)
+}
+
+export function promoApiRequest(path = '', options = {}) {
+  const suffix = path ? `/${path}` : ''
+  return request(`promo-codes${suffix}`, options)
 }

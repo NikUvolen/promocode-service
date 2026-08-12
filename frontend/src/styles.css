@@ -369,6 +369,38 @@ button { border: 0; }
 .account-main { width: min(var(--container-width), calc(100% - (var(--page-gutter) * 2))); margin: 0 auto; padding: 64px 0 80px; }
 .account-intro { max-width: 660px; }
 .account-intro p:last-child { color: var(--muted); line-height: 1.6; }
+.promo-panel { margin-top: 42px; padding: 30px; background: white; border: 1px solid var(--line); border-radius: 8px; }
+.promo-panel__header { display: flex; align-items: flex-start; gap: 16px; }
+.promo-panel__header .eyebrow { margin-bottom: 6px; }
+.promo-panel__header h2 { margin: 0; font-size: 24px; }
+.promo-panel__header p:last-child { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.promo-panel__icon { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; color: var(--blue); background: #e9f3ff; border-radius: 8px; }
+.promo-panel__count { margin-left: auto; padding: 8px 11px; color: #526074; background: #f0f3f7; border-radius: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.promo-entry { display: grid; margin-top: 26px; align-items: end; gap: 16px; grid-template-columns: minmax(0, 1fr) 220px; }
+.promo-entry .button--submit { height: 58px; margin: 0; }
+.promo-code-field { display: grid; gap: 8px; }
+.promo-code-control { position: relative; display: block; width: min(100%, 520px); }
+.promo-code-control__input { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; cursor: text; opacity: 0; }
+.promo-code-control__input:disabled { cursor: not-allowed; }
+.promo-code-slots { display: grid; gap: 7px; grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.promo-code-slot { display: grid; min-width: 0; aspect-ratio: 1 / 1.08; place-items: center; color: #9ba7b6; background: #f7f9fb; border: 1px solid #cbd5e1; border-radius: 7px; font-size: 20px; font-weight: 800; }
+.promo-code-slot--filled { color: var(--ink); background: white; }
+.promo-code-control:focus-within .promo-code-slot { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(8, 117, 239, 0.1); }
+.promo-code-control--error .promo-code-slot { border-color: var(--danger); }
+.promo-locked, .promo-ban { display: flex; margin-top: 22px; padding: 13px 15px; align-items: center; gap: 10px; border-radius: 8px; font-size: 12px; }
+.promo-locked { color: #5c4b16; background: #fff9db; border: 1px solid #ffe066; }
+.promo-locked a { margin-left: auto; color: #745e00; font-weight: 800; }
+.promo-ban { color: #9e1c1c; background: #fff5f5; border: 1px solid #ffc9c9; }
+.promo-ban strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+.promo-panel > .status { margin-top: 22px; }
+.promo-history { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+.promo-history h3 { margin: 0 0 12px; font-size: 14px; }
+.promo-history ul { display: grid; margin: 0; padding: 0; gap: 0; list-style: none; }
+.promo-history li { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #edf0f4; }
+.promo-history li:first-child { border-top: 0; }
+.promo-history li span { font-size: 14px; font-weight: 800; }
+.promo-history time, .promo-history__empty { color: var(--muted); font-size: 12px; }
+.promo-history__empty { margin: 0; }
 .account-grid { display: grid; margin-top: 42px; align-items: start; gap: 24px; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr); }
 .profile-panel, .account-placeholder, .password-panel { padding: 28px; background: white; border: 1px solid var(--line); border-radius: 8px; }
 .profile-panel__heading { padding-bottom: 22px; border-bottom: 1px solid var(--line); }
@@ -432,6 +464,16 @@ button { border: 0; }
   .auth-panel { margin: 0 auto; }
   .auth-panel h1 { font-size: 31px; }
   .account-main { padding: 42px 0 60px; }
+  .promo-panel { margin-top: 28px; padding: 20px; }
+  .promo-panel__header { display: grid; grid-template-columns: 50px 1fr; }
+  .promo-panel__header h2 { font-size: 20px; }
+  .promo-panel__count { margin: 0; grid-column: 1 / -1; justify-self: start; }
+  .promo-entry { grid-template-columns: 1fr; }
+  .promo-entry .button--submit { height: 50px; }
+  .promo-code-slots { gap: 4px; }
+  .promo-code-slot { font-size: 17px; }
+  .promo-locked { align-items: flex-start; flex-wrap: wrap; }
+  .promo-locked a { width: 100%; margin: 2px 0 0 30px; }
   .account-grid { margin-top: 28px; }
   .profile-panel, .account-placeholder, .password-panel { padding: 20px; }
   .profile-form__row { grid-template-columns: 1fr; }

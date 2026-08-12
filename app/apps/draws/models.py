@@ -36,6 +36,18 @@ class Draw(models.Model):
         verbose_name = 'draw'
         verbose_name_plural = 'draws'
         ordering = ['-draw_date']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=('pending', 'running', 'completed', 'failed')
+                ),
+                name='draw_status_valid',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(trigger__in=('automatic', 'manual')),
+                name='draw_trigger_valid',
+            ),
+        ]
 
 
 class Winner(models.Model):
@@ -79,6 +91,10 @@ class Winner(models.Model):
         verbose_name = 'winner'
         verbose_name_plural = 'winners'
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(prize__in=('ozon_3000', 'airpods')),
+                name='winner_prize_valid',
+            ),
             models.UniqueConstraint(
                 fields=['user'],
                 name='unique_winner_user',

@@ -29,9 +29,27 @@ async function mockProfileApi(page, currentProfile = emptyProfile) {
 
 async function mockPromoApi(page, options = {}) {
   const initialCodes = options.initialCodes || []
+  let blocked = Boolean(options.initiallyBlocked)
   await page.route('**/api/v1/promo-codes/**', async (route) => {
+    if (route.request().url().endsWith('/registration-status/')) {
+      await route.fulfill({
+        json: blocked
+          ? {
+              is_blocked: true,
+              retry_after: 300,
+              blocked_until: '2026-08-12T12:05:00Z',
+            }
+          : {
+              is_blocked: false,
+              retry_after: 0,
+              blocked_until: null,
+            },
+      })
+      return
+    }
     if (route.request().method() === 'POST') {
       if (options.rateLimited) {
+        blocked = true
         await route.fulfill({
           status: 429,
           json: {
@@ -196,4 +214,9 @@ test('promo rate limit shows countdown', async ({ page }) => {
   await expect(page.getByText('Ввод временно заблокирован')).toBeVisible()
   await expect(page.locator('.promo-ban strong')).toHaveText('05:00')
   await expect(promoCodeInput).toBeDisabled()
+
+  await page.reload()
+  await expect(page.getByText('Ввод временно заблокирован')).toBeVisible()
+  await expect(page.locator('.promo-ban strong')).toHaveText('05:00')
+  await expect(page.getByRole('textbox', { name: 'Промокод' })).toBeDisabled()
 })

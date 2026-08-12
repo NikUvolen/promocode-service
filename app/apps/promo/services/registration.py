@@ -93,6 +93,26 @@ def _active_ban(user, now):
     return trigger.created_at + BAN_DURATION
 
 
+def get_registration_status(*, user):
+    now = timezone.now()
+    blocked_until = _active_ban(user, now)
+    if blocked_until is None:
+        return {
+            'is_blocked': False,
+            'retry_after': 0,
+            'blocked_until': None,
+        }
+
+    return {
+        'is_blocked': True,
+        'retry_after': max(
+            1,
+            math.ceil((blocked_until - now).total_seconds()),
+        ),
+        'blocked_until': blocked_until,
+    }
+
+
 def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
     profile = Profile.objects.filter(user=user).first()
     if profile is None or not profile.is_complete:

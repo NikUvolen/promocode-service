@@ -34,6 +34,7 @@ class PromoAdminTests(TestCase):
 class PromoCodeApiTests(TestCase):
     list_url = reverse('promo-code-list')
     register_url = reverse('promo-code-register')
+    status_url = reverse('promo-code-registration-status')
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -166,6 +167,32 @@ class PromoCodeApiTests(TestCase):
         )
         self.assertFalse(
             PromoCode.objects.get(code='AB12CD34').registered_by_id
+        )
+
+        status_response = self.client.get(
+            self.status_url,
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+        self.assertEqual(status_response.status_code, 200)
+        self.assertTrue(status_response.json()['is_blocked'])
+        self.assertGreater(status_response.json()['retry_after'], 0)
+        self.assertLessEqual(status_response.json()['retry_after'], 300)
+        self.assertIsNotNone(status_response.json()['blocked_until'])
+
+    def test_registration_status_is_open_without_active_ban(self):
+        response = self.client.get(
+            self.status_url,
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                'is_blocked': False,
+                'retry_after': 0,
+                'blocked_until': None,
+            },
         )
 
     def test_lists_only_current_user_codes(self):

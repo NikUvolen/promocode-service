@@ -10,6 +10,7 @@ from promo.services.registration import (
     ProfileIncomplete,
     PromoCodeRateLimited,
     PromoCodeRegistrationError,
+    get_registration_status,
     register_promo_code,
 )
 
@@ -17,6 +18,7 @@ from .serializers import (
     PromoCodeErrorSerializer,
     PromoCodeRateLimitSerializer,
     PromoCodeRegistrationSerializer,
+    PromoCodeRegistrationStatusSerializer,
     PromoCodeSerializer,
 )
 
@@ -35,6 +37,18 @@ class PromoCodeViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return PromoCode.objects.filter(
             registered_by=self.request.user,
         ).order_by('-registered_at')
+
+    @extend_schema(
+        tags=('Промокоды',),
+        responses={200: PromoCodeRegistrationStatusSerializer},
+    )
+    @action(
+        detail=False,
+        methods=('get',),
+        url_path='registration-status',
+    )
+    def registration_status(self, request):
+        return Response(get_registration_status(user=request.user))
 
     @extend_schema(
         tags=('Промокоды',),

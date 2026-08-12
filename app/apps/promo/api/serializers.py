@@ -26,3 +26,9 @@ class PromoCodeErrorSerializer(serializers.Serializer):
 class PromoCodeRateLimitSerializer(PromoCodeErrorSerializer):
     retry_after = serializers.IntegerField()
     blocked_until = serializers.DateTimeField()
+
+
+class PromoCodeRegistrationStatusSerializer(serializers.Serializer):
+    is_blocked = serializers.BooleanField()
+    retry_after = serializers.IntegerField()
+    blocked_until = serializers.DateTimeField(allow_null=True)

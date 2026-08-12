@@ -34,11 +34,20 @@ export default function PromoCodesPanel({ profileComplete }) {
 
   useEffect(() => {
     let active = true
-    promoApiRequest('', { auth: true })
-      .then((data) => {
+    Promise.all([
+      promoApiRequest('', { auth: true }),
+      promoApiRequest('registration-status', { auth: true }),
+    ])
+      .then(([data, registrationStatus]) => {
         if (!active) return
         setCodes(data.results)
         setTotal(data.count)
+        if (registrationStatus.is_blocked) {
+          setRemaining(registrationStatus.retry_after)
+          setBlockedUntil(
+            Date.now() + registrationStatus.retry_after * 1000,
+          )
+        }
       })
       .catch((requestError) => {
         if (active) setError(requestError.message)

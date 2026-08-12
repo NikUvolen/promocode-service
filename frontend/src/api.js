@@ -75,7 +75,9 @@ async function request(endpoint, options = {}) {
     if (access) headers.Authorization = `Bearer ${access}`
   }
 
-  const response = await fetch(`${API_ROOT}/${endpoint}/`, {
+  const [path, query] = endpoint.split('?')
+  const url = `${API_ROOT}/${path}/${query ? `?${query}` : ''}`
+  const response = await fetch(url, {
     ...fetchOptions,
     headers,
   })
@@ -95,6 +97,8 @@ export function apiRequest(path, options = {}) {
 }
 
 export function promoApiRequest(path = '', options = {}) {
-  const suffix = path ? `/${path}` : ''
+  const suffix = path
+    ? `${path.startsWith('?') ? '' : '/'}${path}`
+    : ''
   return request(`promo-codes${suffix}`, options)
 }

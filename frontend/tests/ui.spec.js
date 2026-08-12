@@ -75,16 +75,25 @@ async function mockPromoApi(page, options = {}) {
       const { code } = route.request().postDataJSON()
       await route.fulfill({
         status: 201,
-        json: { code, registered_at: '2026-08-12T09:30:00Z' },
+        json: {
+          code,
+          registered_at: '2026-08-12T09:30:00Z',
+          status: 'participating',
+          prize: null,
+        },
       })
       return
     }
+    const pageNumber = Number(new URL(route.request().url()).searchParams.get('page') || 1)
+    const pageSize = 10
+    const start = (pageNumber - 1) * pageSize
+    const pageCodes = initialCodes.slice(start, start + pageSize)
     await route.fulfill({
       json: {
         count: initialCodes.length,
-        next: null,
-        previous: null,
-        results: initialCodes,
+        next: start + pageSize < initialCodes.length ? `http://api.test/promo-codes/?page=${pageNumber + 1}` : null,
+        previous: pageNumber > 1 ? `http://api.test/promo-codes/?page=${pageNumber - 1}` : null,
+        results: pageCodes,
       },
     })
   })
@@ -210,6 +219,34 @@ test('promo code can be registered', async ({ page }, testInfo) => {
   await expect(page.locator('.promo-history')).toContainText('AB12CD34')
   await expect(page.locator('.promo-panel__count')).toHaveText('Кодов: 1')
   await page.screenshot({ path: testInfo.outputPath('promo-code.png'), fullPage: true })
+})
+
+test('promo code statuses and pagination are displayed', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gear-drop.tokens',
+      JSON.stringify({ access: 'preview', refresh: 'preview' }),
+    )
+  })
+  await mockProfileApi(page, { ...emptyProfile, is_complete: true })
+  const codes = Array.from({ length: 12 }, (_, index) => ({
+    code: `CD${String(index).padStart(6, '0')}`,
+    registered_at: '2026-08-12T09:30:00Z',
+    status: index === 0 ? 'won' : index === 1 ? 'not_won' : 'participating',
+    prize: index === 0 ? { code: 'airpods', name: 'AirPods' } : null,
+  }))
+  await mockPromoApi(page, { initialCodes: codes })
+
+  await page.goto('/account')
+
+  await expect(page.locator('.promo-history__item')).toHaveCount(10)
+  await expect(page.getByText('Выиграл', { exact: true })).toBeVisible()
+  await expect(page.getByText('Не выиграл', { exact: true })).toBeVisible()
+  await expect(page.getByText('Подробности отправлены на вашу почту.', { exact: false })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('promo-statuses.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Показать еще (2)' }).click()
+  await expect(page.locator('.promo-history__item')).toHaveCount(12)
+  await expect(page.getByRole('button', { name: /Показать еще/ })).toHaveCount(0)
 })
 
 test('promo rate limit shows countdown', async ({ page }) => {

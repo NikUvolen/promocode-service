@@ -81,30 +81,44 @@ export default function LandingPage() {
 
         <div className="game-ticker" aria-hidden="true">
           <div className="game-ticker__track">
-            <span>8 символов</span><Sparkles /><span>2 приза ежедневно</span><Gamepad2 />
-            <span>1 код = 1 шанс</span><Sparkles /><span>8 символов</span><Gamepad2 />
-            <span>2 приза ежедневно</span><Sparkles /><span>1 код = 1 шанс</span>
+            {[0, 1].map((group) => (
+              <div className="game-ticker__group" key={group}>
+                <span>8 символов</span><Sparkles />
+                <span>2 приза ежедневно</span><Gamepad2 />
+                <span>1 код = 1 шанс</span><Sparkles />
+              </div>
+            ))}
           </div>
         </div>
 
         <section className="steps-section" id="how-it-works">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Твоя игровая сессия</p>
-              <h2>Три шага<br />до нового gear</h2>
-            </div>
-            <p>Без сложных правил: активируй код до полуночи и следи за результатами в личном кабинете.</p>
+          <div className="steps-section__intro">
+            <p className="eyebrow eyebrow--light">Как участвовать</p>
+            <h2>Код. Кабинет.<br />Розыгрыш.</h2>
+            <p>Все просто: регистрируй код до полуночи, а результат проверяй здесь или в личном кабинете.</p>
+            <Link className="button button--light steps-section__action" to="/register">
+              Начать игру
+              <ArrowRight size={18} />
+            </Link>
           </div>
-          <div className="steps-grid">
+          <ol className="steps-route">
             {steps.map(({ icon: Icon, number, title, text }) => (
-              <article className="step" key={number}>
-                <span className="step__icon"><Icon size={24} /></span>
-                <span className="step__number">{number}</span>
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </article>
+              <li className="route-step" key={number}>
+                <span className="route-step__icon"><Icon size={22} /></span>
+                <div className="route-step__content">
+                  <span className="route-step__number">Шаг {number}</span>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </div>
+                <Check className="route-step__check" size={18} />
+              </li>
             ))}
-          </div>
+            <li className="steps-route__deadline">
+              <CalendarDays size={18} />
+              <span>Коды текущего дня принимаются до</span>
+              <strong>00:00 МСК</strong>
+            </li>
+          </ol>
         </section>
 
         <section className="prizes-section" id="prizes">

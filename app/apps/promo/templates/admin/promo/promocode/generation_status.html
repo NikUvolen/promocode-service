@@ -1,0 +1,42 @@
+{% if latest_generation %}
+    {% if latest_generation.status == "queued" or latest_generation.status == "running" %}
+        <meta http-equiv="refresh" content="5">
+    {% endif %}
+
+    <div class="border border-base-200 dark:border-base-800 mb-4 p-4 rounded-default">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p class="font-semibold text-font-important-light dark:text-font-important-dark">
+                    Всего кодов: {{ promo_code_count }}
+                </p>
+                <p class="mt-1 text-sm text-font-subtle-light dark:text-font-subtle-dark">
+                    Последняя генерация: {{ latest_generation.get_status_display }}.
+                    Добавлено {{ latest_generation.generated_count }} из {{ latest_generation.requested_count }}.
+                </p>
+                {% if latest_generation.error %}
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">
+                        {{ latest_generation.error }}
+                    </p>
+                {% endif %}
+            </div>
+            <div class="font-semibold text-primary-600 dark:text-primary-500">
+                {{ latest_generation.progress_percent }}%
+            </div>
+        </div>
+        <div class="bg-base-100 dark:bg-base-800 h-2 mt-3 overflow-hidden rounded-default">
+            <div
+                class="bg-primary-600 h-full transition-all"
+                style="width: {{ latest_generation.progress_percent }}%"
+            ></div>
+        </div>
+    </div>
+{% else %}
+    <div class="border border-base-200 dark:border-base-800 mb-4 p-4 rounded-default">
+        <p class="font-semibold text-font-important-light dark:text-font-important-dark">
+            Всего кодов: {{ promo_code_count }}
+        </p>
+        <p class="mt-1 text-sm text-font-subtle-light dark:text-font-subtle-dark">
+            Генерации еще не запускались.
+        </p>
+    </div>
+{% endif %}

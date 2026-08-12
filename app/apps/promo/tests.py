@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core import mail
@@ -7,17 +8,18 @@ from django.utils import timezone
 
 from accounts.models import Profile, User
 from accounts.services.authentication import create_token_pair
-from promo.models import PromoCode, PromoCodeAttempt
+from promo.models import PromoCode, PromoCodeAttempt, PromoCodeGeneration
 from promo.services.notifications import send_registration_email
+from promo.tasks import generate_promo_codes_task
 
 
 class PromoAdminTests(TestCase):
     def setUp(self):
-        admin_user = User.objects.create_superuser(
+        self.admin_user = User.objects.create_superuser(
             email='admin@example.com',
             password='test-password',
         )
-        self.client.force_login(admin_user)
+        self.client.force_login(self.admin_user)
 
     def test_promo_admin_pages_render(self):
         urls = (
@@ -29,6 +31,101 @@ class PromoAdminTests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
+
+    @patch('promo.admin.generate_promo_codes_task.delay')
+    def test_starts_promo_code_generation_from_admin(self, delay):
+        delay.return_value = SimpleNamespace(id='celery-task-id')
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_generate_codes'),
+            {
+                '_form_submitted': True,
+                'count': 250_000,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse('admin:promo_promocode_changelist'),
+        )
+        generation = PromoCodeGeneration.objects.get()
+        self.assertEqual(generation.requested_count, 250_000)
+        self.assertEqual(generation.created_by, self.admin_user)
+        self.assertEqual(generation.celery_task_id, 'celery-task-id')
+        delay.assert_called_once_with(generation.pk)
+
+    @patch('promo.admin.generate_promo_codes_task.delay')
+    def test_rejects_second_active_generation(self, delay):
+        PromoCodeGeneration.objects.create(
+            requested_count=100,
+            created_by=self.admin_user,
+        )
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_generate_codes'),
+            {
+                '_form_submitted': True,
+                'count': 200,
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(PromoCodeGeneration.objects.count(), 1)
+        delay.assert_not_called()
+
+
+class PromoCodeGenerationTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            email='generator@example.com',
+            password='test-password',
+        )
+
+    @patch('promo.services.generation.BATCH_SIZE', 3)
+    @patch('promo.services.generation._generate_unique_candidates')
+    def test_adds_exact_requested_count_despite_existing_codes(
+        self,
+        generate_candidates,
+    ):
+        PromoCode.objects.create(code='AAAAAAAA')
+        generate_candidates.side_effect = (
+            {'AAAAAAAA', 'BBBBBBBB', 'CCCCCCCC'},
+            {'DDDDDDDD'},
+        )
+        generation = PromoCodeGeneration.objects.create(
+            requested_count=3,
+            created_by=self.admin_user,
+        )
+
+        result = generate_promo_codes_task(generation.pk)
+
+        generation.refresh_from_db()
+        self.assertEqual(result, 3)
+        self.assertEqual(generation.generated_count, 3)
+        self.assertEqual(
+            generation.status,
+            PromoCodeGeneration.Status.COMPLETED,
+        )
+        self.assertEqual(PromoCode.objects.count(), 4)
+
+    @patch(
+        'promo.tasks.generate_promo_codes',
+        side_effect=RuntimeError('Database unavailable'),
+    )
+    def test_marks_generation_as_failed(self, generate_codes):
+        generation = PromoCodeGeneration.objects.create(
+            requested_count=3,
+            created_by=self.admin_user,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, 'Database unavailable'):
+            generate_promo_codes_task(generation.pk)
+
+        generation.refresh_from_db()
+        self.assertEqual(generation.status, PromoCodeGeneration.Status.FAILED)
+        self.assertEqual(generation.error, 'Database unavailable')
+        self.assertIsNotNone(generation.finished_at)
 
 
 class PromoCodeApiTests(TestCase):

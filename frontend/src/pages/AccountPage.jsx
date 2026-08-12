@@ -1,4 +1,4 @@
-import { CheckCircle2, KeyRound, LogOut, TicketCheck, UserRound } from 'lucide-react'
+import { CheckCircle2, KeyRound, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -7,6 +7,7 @@ import { useAuth } from '../auth'
 import Brand from '../components/Brand'
 import FormField from '../components/FormField'
 import PhoneField, { isCompleteRussianPhone } from '../components/PhoneField'
+import PromoCodesPanel from '../components/PromoCodesPanel'
 import StatusMessage from '../components/StatusMessage'
 import SubmitButton from '../components/SubmitButton'
 import { fieldError } from '../form'
@@ -160,11 +161,12 @@ export default function AccountPage() {
       <main className="account-main">
         <section className="account-intro">
           <p className="eyebrow">Личный кабинет</p>
-          <h1>Профиль участника</h1>
-          <p>Эти данные понадобятся организатору, если ваш промокод победит.</p>
+          <h1>Личный кабинет</h1>
+          <p>Регистрируйте промокоды и следите за своим участием.</p>
         </section>
+        {!profileState.loading && <PromoCodesPanel profileComplete={profile.is_complete} />}
         <section className="account-grid">
-          <section className="profile-panel">
+          <section className="profile-panel" id="profile">
             <div className="panel-heading profile-panel__heading">
               <UserRound size={23} />
               <div>
@@ -184,10 +186,10 @@ export default function AccountPage() {
                 )}
                 <FormField id="profile-email" label="Email" type="email" value={profile.email} disabled />
                 <div className="profile-form__row">
-                  <FormField id="last-name" label="Фамилия" autoComplete="family-name" value={profile.last_name} error={fieldError(profileState.error, 'last_name')} onChange={(event) => updateProfile('last_name', event.target.value)} required />
-                  <FormField id="first-name" label="Имя" autoComplete="given-name" value={profile.first_name} error={fieldError(profileState.error, 'first_name')} onChange={(event) => updateProfile('first_name', event.target.value)} required />
+                  <FormField id="last-name" label="Фамилия" autoComplete="family-name" maxLength={100} value={profile.last_name} error={fieldError(profileState.error, 'last_name')} onChange={(event) => updateProfile('last_name', event.target.value)} required />
+                  <FormField id="first-name" label="Имя" autoComplete="given-name" maxLength={100} value={profile.first_name} error={fieldError(profileState.error, 'first_name')} onChange={(event) => updateProfile('first_name', event.target.value)} required />
                 </div>
-                <FormField id="middle-name" label="Отчество" autoComplete="additional-name" value={profile.middle_name} error={fieldError(profileState.error, 'middle_name')} disabled={profile.no_middle_name} onChange={(event) => updateProfile('middle_name', event.target.value)} required={!profile.no_middle_name} />
+                <FormField id="middle-name" label="Отчество" autoComplete="additional-name" maxLength={100} value={profile.middle_name} error={fieldError(profileState.error, 'middle_name')} disabled={profile.no_middle_name} onChange={(event) => updateProfile('middle_name', event.target.value)} required={!profile.no_middle_name} />
                 <label className="checkbox-field profile-checkbox">
                   <input
                     type="checkbox"
@@ -207,10 +209,6 @@ export default function AccountPage() {
           </section>
 
           <aside className="account-sidebar">
-            <article className="account-placeholder">
-              <span className="account-placeholder__icon"><TicketCheck size={26} /></span>
-              <div><h2>Промокоды</h2><p>{profile.is_complete ? 'Профиль готов. Скоро здесь можно будет вводить коды.' : 'Сначала заполните профиль, чтобы регистрировать коды.'}</p></div>
-            </article>
             <section className="password-panel">
               <div className="panel-heading"><KeyRound size={23} /><div><h2>Смена пароля</h2><p>После смены потребуется войти заново.</p></div></div>
               {passwordError && !fieldError(passwordError, 'old_password') && !fieldError(passwordError, 'new_password') && !passwordError.localConfirmation && <StatusMessage type="error">{passwordError.message}</StatusMessage>}

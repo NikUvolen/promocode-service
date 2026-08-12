@@ -443,6 +443,19 @@ class ProfileApiTests(TestCase):
         self.assertEqual(self.profile.first_name, 'Михаил')
         self.assertTrue(response.json()['is_complete'])
 
+    def test_profile_completeness_does_not_depend_on_hidden_consent(self):
+        self.profile.personal_data_consent_at = None
+        self.profile.first_name = 'Михаил'
+        self.profile.last_name = 'Иванов'
+        self.profile.no_middle_name = True
+        self.profile.phone = '+7 (999) 123-45-67'
+        self.profile.save()
+
+        response = self.request()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['is_complete'])
+
     def test_clears_middle_name_when_absent(self):
         self.profile.middle_name = 'Сергеевич'
         self.profile.save()

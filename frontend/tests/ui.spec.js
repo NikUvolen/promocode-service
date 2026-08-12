@@ -10,20 +10,72 @@ const emptyProfile = {
   is_complete: false,
 }
 
-async function mockProfileApi(page) {
+async function mockProfileApi(page, currentProfile = emptyProfile) {
   await page.route('**/api/v1/auth/profile/', async (route) => {
     if (route.request().method() === 'PATCH') {
       const requestProfile = route.request().postDataJSON()
       await route.fulfill({
         json: {
-          ...emptyProfile,
+          ...currentProfile,
           ...requestProfile,
           is_complete: true,
         },
       })
       return
     }
-    await route.fulfill({ json: emptyProfile })
+    await route.fulfill({ json: currentProfile })
+  })
+}
+
+async function mockPromoApi(page, options = {}) {
+  const initialCodes = options.initialCodes || []
+  let blocked = Boolean(options.initiallyBlocked)
+  await page.route('**/api/v1/promo-codes/**', async (route) => {
+    if (route.request().url().endsWith('/registration-status/')) {
+      await route.fulfill({
+        json: blocked
+          ? {
+              is_blocked: true,
+              retry_after: 300,
+              blocked_until: '2026-08-12T12:05:00Z',
+            }
+          : {
+              is_blocked: false,
+              retry_after: 0,
+              blocked_until: null,
+            },
+      })
+      return
+    }
+    if (route.request().method() === 'POST') {
+      if (options.rateLimited) {
+        blocked = true
+        await route.fulfill({
+          status: 429,
+          json: {
+            detail: 'Слишком много неудачных попыток. Попробуйте позже.',
+            reason: 'rate_limited',
+            retry_after: 300,
+            blocked_until: '2026-08-12T12:05:00Z',
+          },
+        })
+        return
+      }
+      const { code } = route.request().postDataJSON()
+      await route.fulfill({
+        status: 201,
+        json: { code, registered_at: '2026-08-12T09:30:00Z' },
+      })
+      return
+    }
+    await route.fulfill({
+      json: {
+        count: initialCodes.length,
+        next: null,
+        previous: null,
+        results: initialCodes,
+      },
+    })
   })
 }
 
@@ -79,6 +131,7 @@ test('account header and content share a container', async ({ page }) => {
     )
   })
   await mockProfileApi(page)
+  await mockPromoApi(page)
   await page.goto('/account')
 
   const accountBrand = await page.locator('.account-header .brand').boundingBox()
@@ -94,6 +147,7 @@ test('profile can be viewed and updated', async ({ page }, testInfo) => {
     )
   })
   await mockProfileApi(page)
+  await mockPromoApi(page)
   await page.goto('/account')
 
   await expect(page.getByLabel('Email')).toHaveValue('user@example.com')
@@ -111,4 +165,58 @@ test('profile can be viewed and updated', async ({ page }, testInfo) => {
   await expect(page.getByText('Данные профиля сохранены.')).toBeVisible()
   await expect(page.getByLabel('Профиль заполнен')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('profile.png'), fullPage: true })
+})
+
+test('promo code can be registered', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gear-drop.tokens',
+      JSON.stringify({ access: 'preview', refresh: 'preview' }),
+    )
+  })
+  await mockProfileApi(page, {
+    ...emptyProfile,
+    first_name: 'Михаил',
+    last_name: 'Иванов',
+    no_middle_name: true,
+    phone: '+7 (999) 123-45-67',
+    is_complete: true,
+  })
+  await mockPromoApi(page)
+  await page.goto('/account')
+
+  const promoCodeInput = page.getByRole('textbox', { name: 'Промокод' })
+  await promoCodeInput.fill('ab12cd34')
+  await expect(promoCodeInput).toHaveValue('AB12CD34')
+  await page.getByRole('button', { name: 'Зарегистрировать' }).click()
+
+  await expect(page.getByText('Промокод AB12CD34 зарегистрирован.')).toBeVisible()
+  await expect(page.locator('.promo-history')).toContainText('AB12CD34')
+  await expect(page.locator('.promo-panel__count')).toHaveText('Кодов: 1')
+  await page.screenshot({ path: testInfo.outputPath('promo-code.png'), fullPage: true })
+})
+
+test('promo rate limit shows countdown', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gear-drop.tokens',
+      JSON.stringify({ access: 'preview', refresh: 'preview' }),
+    )
+  })
+  await mockProfileApi(page, { ...emptyProfile, is_complete: true })
+  await mockPromoApi(page, { rateLimited: true })
+  await page.goto('/account')
+
+  const promoCodeInput = page.getByRole('textbox', { name: 'Промокод' })
+  await promoCodeInput.fill('AB12CD34')
+  await page.getByRole('button', { name: 'Зарегистрировать' }).click()
+
+  await expect(page.getByText('Ввод временно заблокирован')).toBeVisible()
+  await expect(page.locator('.promo-ban strong')).toHaveText('05:00')
+  await expect(promoCodeInput).toBeDisabled()
+
+  await page.reload()
+  await expect(page.getByText('Ввод временно заблокирован')).toBeVisible()
+  await expect(page.locator('.promo-ban strong')).toHaveText('05:00')
+  await expect(page.getByRole('textbox', { name: 'Промокод' })).toBeDisabled()
 })

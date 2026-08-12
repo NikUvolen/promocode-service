@@ -106,3 +106,56 @@ class PromoCodeAttempt(models.Model):
             models.Index(fields=['normalized_code']),
             models.Index(fields=['result', 'created_at']),
         ]
+
+
+class PromoCodeGeneration(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = 'queued', 'В очереди'
+        RUNNING = 'running', 'Выполняется'
+        COMPLETED = 'completed', 'Завершено'
+        FAILED = 'failed', 'Ошибка'
+
+    requested_count = models.PositiveIntegerField()
+    generated_count = models.PositiveIntegerField(default=0)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='promo_code_generations',
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    error = models.TextField(blank=True)
+    lock_key = models.CharField(
+        max_length=32,
+        default='promo_codes',
+        editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.requested_count} codes | {self.get_status_display()}'
+
+    @property
+    def progress_percent(self):
+        if not self.requested_count:
+            return 0
+        return min(100, self.generated_count * 100 // self.requested_count)
+
+    class Meta:
+        verbose_name = 'promo code generation'
+        verbose_name_plural = 'promo code generations'
+        ordering = ('-created_at',)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['lock_key'],
+                condition=models.Q(status__in=['queued', 'running']),
+                name='unique_active_promo_code_generation',
+            ),
+        ]

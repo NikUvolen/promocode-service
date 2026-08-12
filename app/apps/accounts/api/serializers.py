@@ -28,6 +28,7 @@ from accounts.services.passwords import (
     change_password,
     reset_password,
 )
+from accounts.services.profile import normalize_phone, update_profile
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -180,6 +181,61 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {'new_password': exc.messages}
             ) from exc
+
+
+class ProfileSerializer(serializers.Serializer):
+    email = serializers.EmailField(source='user.email', read_only=True)
+    first_name = serializers.CharField(max_length=100, allow_blank=True)
+    last_name = serializers.CharField(max_length=100, allow_blank=True)
+    middle_name = serializers.CharField(
+        max_length=100,
+        allow_blank=True,
+        required=False,
+    )
+    no_middle_name = serializers.BooleanField()
+    phone = serializers.CharField(max_length=32, allow_blank=True)
+    is_complete = serializers.BooleanField(read_only=True)
+
+    def validate(self, attrs):
+        instance = self.instance
+        values = {
+            'first_name': attrs.get('first_name', instance.first_name),
+            'last_name': attrs.get('last_name', instance.last_name),
+            'middle_name': attrs.get('middle_name', instance.middle_name),
+            'no_middle_name': attrs.get(
+                'no_middle_name',
+                instance.no_middle_name,
+            ),
+            'phone': attrs.get('phone', instance.phone),
+        }
+
+        for field in ('first_name', 'last_name', 'middle_name', 'phone'):
+            values[field] = values[field].strip()
+
+        errors = {}
+        for field in ('first_name', 'last_name', 'phone'):
+            if not values[field]:
+                errors[field] = 'Обязательное поле.'
+
+        if not values['no_middle_name'] and not values['middle_name']:
+            errors['middle_name'] = (
+                'Укажите отчество или отметьте, что его нет.'
+            )
+
+        if values['phone']:
+            try:
+                values['phone'] = normalize_phone(values['phone'])
+            except ValueError:
+                errors['phone'] = 'Введите российский номер из 10 цифр.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        attrs.update(values)
+        return attrs
+
+    def update(self, instance, validated_data):
+        return update_profile(profile=instance, **validated_data)
 
 
 class DetailResponseSerializer(serializers.Serializer):

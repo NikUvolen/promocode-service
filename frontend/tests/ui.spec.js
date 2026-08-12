@@ -1,5 +1,32 @@
 import { expect, test } from '@playwright/test'
 
+const emptyProfile = {
+  email: 'user@example.com',
+  first_name: '',
+  last_name: '',
+  middle_name: '',
+  no_middle_name: false,
+  phone: '',
+  is_complete: false,
+}
+
+async function mockProfileApi(page) {
+  await page.route('**/api/v1/auth/profile/', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      const requestProfile = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          ...emptyProfile,
+          ...requestProfile,
+          is_complete: true,
+        },
+      })
+      return
+    }
+    await route.fulfill({ json: emptyProfile })
+  })
+}
+
 test('landing is visible without horizontal overflow', async ({ page }, testInfo) => {
   await page.goto('/')
 
@@ -51,9 +78,37 @@ test('account header and content share a container', async ({ page }) => {
       JSON.stringify({ access: 'preview', refresh: 'preview' }),
     )
   })
+  await mockProfileApi(page)
   await page.goto('/account')
 
   const accountBrand = await page.locator('.account-header .brand').boundingBox()
   const accountMain = await page.locator('.account-main').boundingBox()
   expect(Math.abs(accountBrand.x - accountMain.x)).toBeLessThanOrEqual(1)
+})
+
+test('profile can be viewed and updated', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gear-drop.tokens',
+      JSON.stringify({ access: 'preview', refresh: 'preview' }),
+    )
+  })
+  await mockProfileApi(page)
+  await page.goto('/account')
+
+  await expect(page.getByLabel('Email')).toHaveValue('user@example.com')
+  await page.getByLabel('Фамилия').fill('Иванов')
+  await page.getByLabel('Имя').fill('Михаил')
+  await page.getByText('Нет отчества').click()
+  await page.getByLabel('Телефон').fill('80055')
+  await page.getByRole('button', { name: 'Сохранить профиль' }).click()
+  await expect(page.getByText('Введите 10 цифр номера телефона.')).toBeVisible()
+
+  await page.getByLabel('Телефон').fill('+78005553535')
+  await expect(page.getByLabel('Телефон')).toHaveValue('(800) 555-35-35')
+  await page.getByRole('button', { name: 'Сохранить профиль' }).click()
+
+  await expect(page.getByText('Данные профиля сохранены.')).toBeVisible()
+  await expect(page.getByLabel('Профиль заполнен')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('profile.png'), fullPage: true })
 })

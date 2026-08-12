@@ -1,4 +1,4 @@
-import { Clock3, LockKeyhole, TicketCheck } from 'lucide-react'
+import { Clock3, LoaderCircle, LockKeyhole, TicketCheck, Trophy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { promoApiRequest } from '../api'
@@ -21,11 +21,19 @@ function formatCountdown(seconds) {
   return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
 }
 
+const STATUS_LABELS = {
+  participating: 'Участвует',
+  not_won: 'Не выиграл',
+  won: 'Выиграл',
+}
+
 export default function PromoCodesPanel({ profileComplete }) {
   const [code, setCode] = useState('')
   const [codes, setCodes] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextPage, setNextPage] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -42,6 +50,7 @@ export default function PromoCodesPanel({ profileComplete }) {
         if (!active) return
         setCodes(data.results)
         setTotal(data.count)
+        setNextPage(data.next ? 2 : null)
         if (registrationStatus.is_blocked) {
           setRemaining(registrationStatus.retry_after)
           setBlockedUntil(
@@ -109,6 +118,21 @@ export default function PromoCodesPanel({ profileComplete }) {
     }
   }
 
+  async function handleLoadMore() {
+    if (!nextPage) return
+    setLoadingMore(true)
+    setError('')
+    try {
+      const data = await promoApiRequest(`?page=${nextPage}`, { auth: true })
+      setCodes((current) => [...current, ...data.results])
+      setNextPage(data.next ? nextPage + 1 : null)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   const isBlocked = remaining > 0
   const inputDisabled = !profileComplete || isBlocked
 
@@ -163,14 +187,39 @@ export default function PromoCodesPanel({ profileComplete }) {
         ) : codes.length === 0 ? (
           <p className="promo-history__empty">Зарегистрированных кодов пока нет.</p>
         ) : (
-          <ul>
+          <ul className="promo-history__list">
             {codes.map((item) => (
-              <li key={item.code}>
-                <span>{item.code}</span>
-                <time dateTime={item.registered_at}>{formatDate(item.registered_at)}</time>
+              <li className={`promo-history__item promo-history__item--${item.status}`} key={item.code}>
+                <div className="promo-history__code">
+                  <span>{item.code}</span>
+                  <time dateTime={item.registered_at}>{formatDate(item.registered_at)}</time>
+                </div>
+                <div className="promo-history__result">
+                  <span className={`promo-status promo-status--${item.status}`}>
+                    {item.status === 'won' && <Trophy size={14} />}
+                    {STATUS_LABELS[item.status]}
+                  </span>
+                  {item.status === 'won' && (
+                    <span className="promo-history__win-note">
+                      {item.prize?.name && <strong>{item.prize.name}. </strong>}
+                      Подробности отправлены на вашу почту.
+                    </span>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
+        )}
+        {nextPage && (
+          <button
+            className="promo-history__more"
+            type="button"
+            disabled={loadingMore}
+            onClick={handleLoadMore}
+          >
+            {loadingMore && <LoaderCircle className="spin" size={16} />}
+            {loadingMore ? 'Загружаем...' : `Показать еще (${total - codes.length})`}
+          </button>
         )}
       </div>
     </section>

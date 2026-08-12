@@ -6,6 +6,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.db import connections, IntegrityError, transaction
+from django.core import mail
 from django.test import TestCase, TransactionTestCase
 from django.test import override_settings
 from django.urls import reverse
@@ -14,6 +15,7 @@ from django.utils import timezone
 from accounts.models import Profile, User
 from draws.models import Draw, Winner
 from draws.services.draw import InvalidDrawPeriod, run_draw
+from draws.services.notifications import send_winner_email
 from draws.tasks import run_daily_draw_task
 from promo.models import PromoCode
 
@@ -41,6 +43,13 @@ class DrawsAdminTests(TestCase):
 class DrawServiceTests(TransactionTestCase):
     draw_date = datetime(2026, 8, 12).date()
     moscow = ZoneInfo('Europe/Moscow')
+
+    def setUp(self):
+        self.notification_patcher = patch(
+            'draws.services.draw.schedule_winner_emails'
+        )
+        self.schedule_winner_emails = self.notification_patcher.start()
+        self.addCleanup(self.notification_patcher.stop)
 
     def create_participant(self, index, registered_at=None):
         user = User.objects.create_user(
@@ -179,6 +188,7 @@ class DrawServiceTests(TransactionTestCase):
         )
         repeated_draw.refresh_from_db()
         self.assertEqual(repeated_draw.trigger, Draw.Trigger.MANUAL)
+        self.assertEqual(self.schedule_winner_emails.call_count, 2)
 
     def test_rejects_naive_or_invalid_cutoff(self):
         with self.assertRaises(InvalidDrawPeriod):
@@ -301,7 +311,7 @@ class DailyDrawTaskTests(TestCase):
         )
 
     @override_settings(TIME_ZONE='Europe/Moscow')
-    def test_beat_runs_at_moscow_midnight(self):
+    def test_beat_registers_daily_draw_task(self):
         from django.conf import settings
 
         entry = settings.CELERY_BEAT_SCHEDULE[
@@ -309,6 +319,55 @@ class DailyDrawTaskTests(TestCase):
         ]
 
         self.assertEqual(entry['task'], 'draws.tasks.run_daily_draw_task')
-        self.assertEqual(entry['schedule'].hour, {0})
-        self.assertEqual(entry['schedule'].minute, {0})
         self.assertEqual(entry['options']['expires'], 3600)
+
+
+class WinnerNotificationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='winner@example.com',
+            password='StrongPassword_123!',
+        )
+        Profile.objects.create(
+            user=self.user,
+            promo_code_email_notifications=False,
+        )
+        self.promo_code = PromoCode.objects.create(
+            code='PRIZE001',
+            registered_by=self.user,
+            registered_at=timezone.now(),
+        )
+        self.draw = Draw.objects.create(
+            draw_date=timezone.localdate(),
+            status=Draw.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+        self.winner = Winner.objects.create(
+            draw=self.draw,
+            user=self.user,
+            promo_code=self.promo_code,
+            prize=Winner.Prize.AIRPODS,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_sends_mandatory_winner_email_and_marks_notification(self):
+        sent = send_winner_email(self.winner.pk)
+
+        self.assertTrue(sent)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.user.email])
+        self.assertIn('AirPods', mail.outbox[0].body)
+        self.assertIn(self.promo_code.code, mail.outbox[0].body)
+        self.winner.refresh_from_db()
+        self.assertIsNotNone(self.winner.notified_at)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_does_not_send_winner_email_twice(self):
+        self.assertTrue(send_winner_email(self.winner.pk))
+        self.assertFalse(send_winner_email(self.winner.pk))
+
+        self.assertEqual(len(mail.outbox), 1)

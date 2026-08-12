@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from draws.models import Draw, Winner
 from draws.services.locks import lock_draw_date
+from draws.services.notifications import schedule_winner_emails
 from promo.models import PromoCode
 
 
@@ -47,6 +48,7 @@ def run_draw(*, draw_date, trigger, cutoff=None):
         )
 
         if draw.status == Draw.Status.COMPLETED:
+            _schedule_unnotified_winners(draw)
             return draw
 
         started_at = timezone.now()
@@ -88,6 +90,7 @@ def run_draw(*, draw_date, trigger, cutoff=None):
         draw.save(
             update_fields=('status', 'completed_at', 'updated_at')
         )
+        _schedule_unnotified_winners(draw)
         return draw
 
 
@@ -105,3 +108,15 @@ def _select_winning_code(*, starts_at, ends_at):
     if count == 0:
         return None
     return candidates[secrets.randbelow(count)]
+
+
+def _schedule_unnotified_winners(draw):
+    winner_ids = list(
+        draw.winners.filter(notified_at__isnull=True).values_list(
+            'pk', flat=True
+        )
+    )
+    if winner_ids:
+        transaction.on_commit(
+            lambda: schedule_winner_emails(winner_ids)
+        )

@@ -1,3 +1,4 @@
+import smtplib
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
@@ -8,6 +9,19 @@ from django.utils import timezone
 
 from draws.models import Draw
 from draws.services.draw import run_draw
+from draws.services.notifications import send_winner_email
+
+
+@shared_task(
+    autoretry_for=(OSError, smtplib.SMTPException),
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def send_winner_email_task(winner_id):
+    return send_winner_email(winner_id)
 
 
 @shared_task(

@@ -28,7 +28,11 @@ from accounts.services.passwords import (
     change_password,
     reset_password,
 )
-from accounts.services.profile import normalize_phone, update_profile
+from accounts.services.profile import (
+    normalize_phone,
+    update_notification_settings,
+    update_profile,
+)
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -236,6 +240,16 @@ class ProfileSerializer(serializers.Serializer):
 
     def update(self, instance, validated_data):
         return update_profile(profile=instance, **validated_data)
+
+
+class NotificationSettingsSerializer(serializers.Serializer):
+    promo_code_email_notifications = serializers.BooleanField()
+
+    def update(self, instance, validated_data):
+        return update_notification_settings(
+            profile=instance,
+            **validated_data,
+        )
 
 
 class DetailResponseSerializer(serializers.Serializer):

@@ -45,3 +45,15 @@ def update_profile(
         )
     )
     return profile
+
+
+def update_notification_settings(
+    *,
+    profile: Profile,
+    promo_code_email_notifications: bool,
+) -> Profile:
+    profile.promo_code_email_notifications = promo_code_email_notifications
+    profile.save(
+        update_fields=('promo_code_email_notifications', 'updated_at')
+    )
+    return profile

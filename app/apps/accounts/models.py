@@ -122,5 +122,4 @@ class Profile(models.Model):
             self.last_name.strip(),
             self.phone.strip(),
             has_middle_name,
-            self.personal_data_consent_at,
         ])

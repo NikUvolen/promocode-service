@@ -186,10 +186,10 @@ export default function AccountPage() {
                 )}
                 <FormField id="profile-email" label="Email" type="email" value={profile.email} disabled />
                 <div className="profile-form__row">
-                  <FormField id="last-name" label="Фамилия" autoComplete="family-name" value={profile.last_name} error={fieldError(profileState.error, 'last_name')} onChange={(event) => updateProfile('last_name', event.target.value)} required />
-                  <FormField id="first-name" label="Имя" autoComplete="given-name" value={profile.first_name} error={fieldError(profileState.error, 'first_name')} onChange={(event) => updateProfile('first_name', event.target.value)} required />
+                  <FormField id="last-name" label="Фамилия" autoComplete="family-name" maxLength={100} value={profile.last_name} error={fieldError(profileState.error, 'last_name')} onChange={(event) => updateProfile('last_name', event.target.value)} required />
+                  <FormField id="first-name" label="Имя" autoComplete="given-name" maxLength={100} value={profile.first_name} error={fieldError(profileState.error, 'first_name')} onChange={(event) => updateProfile('first_name', event.target.value)} required />
                 </div>
-                <FormField id="middle-name" label="Отчество" autoComplete="additional-name" value={profile.middle_name} error={fieldError(profileState.error, 'middle_name')} disabled={profile.no_middle_name} onChange={(event) => updateProfile('middle_name', event.target.value)} required={!profile.no_middle_name} />
+                <FormField id="middle-name" label="Отчество" autoComplete="additional-name" maxLength={100} value={profile.middle_name} error={fieldError(profileState.error, 'middle_name')} disabled={profile.no_middle_name} onChange={(event) => updateProfile('middle_name', event.target.value)} required={!profile.no_middle_name} />
                 <label className="checkbox-field profile-checkbox">
                   <input
                     type="checkbox"

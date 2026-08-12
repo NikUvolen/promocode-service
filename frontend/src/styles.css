@@ -333,6 +333,12 @@ button { border: 0; }
 .field__toggle:hover { color: var(--ink); background: #f0f3f7; }
 .field__error, .standalone-error { color: var(--danger); font-size: 12px; line-height: 1.45; }
 .field__hint { color: #7a8798; font-size: 11px; line-height: 1.45; }
+.phone-control { display: flex; height: 50px; align-items: center; overflow: hidden; background: white; border: 1px solid #cdd6e1; border-radius: 8px; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.phone-control:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(8, 117, 239, 0.12); }
+.phone-control--error { border-color: var(--danger); }
+.phone-control__prefix { display: flex; height: 26px; padding: 0 12px 0 14px; align-items: center; color: var(--ink); border-right: 1px solid var(--line); font-size: 15px; font-weight: 700; }
+.phone-control input { min-width: 0; height: 100%; flex: 1; padding: 0 14px 0 12px; color: var(--ink); background: transparent; border: 0; outline: 0; }
+.phone-control input::placeholder { color: #9aa5b3; }
 .form-link { color: var(--blue); font-size: 13px; font-weight: 700; text-decoration: none; }
 .form-link--right { margin-top: -6px; justify-self: end; }
 .auth-switch { margin: 24px 0 0; color: var(--muted); font-size: 13px; text-align: center; }

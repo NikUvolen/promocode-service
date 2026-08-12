@@ -100,7 +100,12 @@ test('profile can be viewed and updated', async ({ page }, testInfo) => {
   await page.getByLabel('Фамилия').fill('Иванов')
   await page.getByLabel('Имя').fill('Михаил')
   await page.getByText('Нет отчества').click()
-  await page.getByLabel('Телефон').fill('+7 (999) 123-45-67')
+  await page.getByLabel('Телефон').fill('80055')
+  await page.getByRole('button', { name: 'Сохранить профиль' }).click()
+  await expect(page.getByText('Введите 10 цифр номера телефона.')).toBeVisible()
+
+  await page.getByLabel('Телефон').fill('+78005553535')
+  await expect(page.getByLabel('Телефон')).toHaveValue('(800) 555-35-35')
   await page.getByRole('button', { name: 'Сохранить профиль' }).click()
 
   await expect(page.getByText('Данные профиля сохранены.')).toBeVisible()

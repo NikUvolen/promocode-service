@@ -6,6 +6,7 @@ import { apiRequest } from '../api'
 import { useAuth } from '../auth'
 import Brand from '../components/Brand'
 import FormField from '../components/FormField'
+import PhoneField, { isCompleteRussianPhone } from '../components/PhoneField'
 import StatusMessage from '../components/StatusMessage'
 import SubmitButton from '../components/SubmitButton'
 import { fieldError } from '../form'
@@ -72,6 +73,17 @@ export default function AccountPage() {
 
   async function handleProfileSubmit(event) {
     event.preventDefault()
+    if (!isCompleteRussianPhone(profile.phone)) {
+      setProfileState((current) => ({
+        ...current,
+        error: {
+          message: 'Введите номер полностью.',
+          payload: { phone: 'Введите 10 цифр номера телефона.' },
+        },
+        message: '',
+      }))
+      return
+    }
     setProfileState((current) => ({
       ...current,
       saving: true,
@@ -188,7 +200,7 @@ export default function AccountPage() {
                   <span className="checkbox-field__box" aria-hidden="true" />
                   <span>Нет отчества</span>
                 </label>
-                <FormField id="phone" label="Телефон" type="tel" autoComplete="tel" placeholder="+7 (999) 123-45-67" value={profile.phone} error={fieldError(profileState.error, 'phone')} onChange={(event) => updateProfile('phone', event.target.value)} required />
+                <PhoneField id="phone" label="Телефон" value={profile.phone} error={fieldError(profileState.error, 'phone')} onChange={(value) => updateProfile('phone', value)} />
                 <SubmitButton loading={profileState.saving}>Сохранить профиль</SubmitButton>
               </form>
             )}

@@ -1,8 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core import mail
-from django.test import override_settings, TestCase
+from django.db import connections, IntegrityError
+from django.test import Client, override_settings, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -126,6 +129,153 @@ class PromoCodeGenerationTests(TestCase):
         self.assertEqual(generation.status, PromoCodeGeneration.Status.FAILED)
         self.assertEqual(generation.error, 'Database unavailable')
         self.assertIsNotNone(generation.finished_at)
+
+
+class PromoCodeConcurrencyTests(TransactionTestCase):
+    register_url = reverse('promo-code-register')
+
+    def create_participant(self, email):
+        user = User.objects.create_user(
+            email=email,
+            password='StrongPassword_123!',
+            is_email_verified=True,
+        )
+        Profile.objects.create(
+            user=user,
+            first_name='Михаил',
+            last_name='Иванов',
+            no_middle_name=True,
+            phone='+7 (999) 123-45-67',
+            personal_data_consent_at=timezone.now(),
+            promo_code_email_notifications=False,
+        )
+        return user, create_token_pair(user)['access']
+
+    def register_concurrently(self, requests):
+        barrier = Barrier(len(requests))
+
+        def send_request(token, code):
+            connections.close_all()
+            try:
+                barrier.wait(timeout=5)
+                response = Client().post(
+                    self.register_url,
+                    {'code': code},
+                    content_type='application/json',
+                    HTTP_AUTHORIZATION=f'Bearer {token}',
+                )
+                return response.status_code, response.json()
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=len(requests)) as executor:
+            futures = [
+                executor.submit(send_request, token, code)
+                for token, code in requests
+            ]
+            return [future.result(timeout=10) for future in futures]
+
+    def test_only_one_user_registers_code_under_concurrent_requests(self):
+        first_user, first_token = self.create_participant(
+            'first@example.com'
+        )
+        second_user, second_token = self.create_participant(
+            'second@example.com'
+        )
+        promo_code = PromoCode.objects.create(code='AB12CD34')
+
+        responses = self.register_concurrently(
+            (
+                (first_token, promo_code.code),
+                (second_token, promo_code.code),
+            )
+        )
+
+        self.assertEqual(sorted(status for status, _ in responses), [201, 400])
+        failed_response = next(body for status, body in responses if status == 400)
+        self.assertEqual(
+            failed_response['reason'],
+            PromoCodeAttempt.Reason.ALREADY_REGISTERED,
+        )
+        promo_code.refresh_from_db()
+        self.assertIn(promo_code.registered_by_id, (first_user.pk, second_user.pk))
+        self.assertEqual(
+            PromoCodeAttempt.objects.filter(
+                result=PromoCodeAttempt.Result.SUCCESS,
+            ).count(),
+            1,
+        )
+        self.assertEqual(PromoCodeAttempt.objects.count(), 2)
+
+    def test_concurrent_failures_trigger_single_rate_limit_ban(self):
+        _, token = self.create_participant('limited@example.com')
+
+        responses = self.register_concurrently(
+            tuple(
+                (token, code)
+                for code in ('AA11AA11', 'BB22BB22', 'CC33CC33', 'DD44DD44')
+            )
+        )
+
+        self.assertEqual(
+            sorted(status for status, _ in responses),
+            [400, 400, 400, 429],
+        )
+        blocked_response = next(
+            body for status, body in responses if status == 429
+        )
+        self.assertEqual(
+            blocked_response['reason'],
+            PromoCodeAttempt.Reason.RATE_LIMIT,
+        )
+        self.assertGreater(blocked_response['retry_after'], 0)
+        self.assertLessEqual(blocked_response['retry_after'], 300)
+        self.assertEqual(
+            PromoCodeAttempt.objects.filter(
+                result=PromoCodeAttempt.Result.FAILURE,
+            ).count(),
+            3,
+        )
+        self.assertEqual(
+            PromoCodeAttempt.objects.filter(
+                result=PromoCodeAttempt.Result.BLOCKED,
+                reason=PromoCodeAttempt.Reason.RATE_LIMIT,
+            ).count(),
+            1,
+        )
+
+    def test_only_one_concurrent_generation_can_be_active(self):
+        admin_user = User.objects.create_superuser(
+            email='admin@example.com',
+            password='test-password',
+        )
+        barrier = Barrier(2)
+
+        def create_generation():
+            connections.close_all()
+            try:
+                barrier.wait(timeout=5)
+                PromoCodeGeneration.objects.create(
+                    requested_count=100,
+                    created_by_id=admin_user.pk,
+                )
+                return True
+            except IntegrityError:
+                return False
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = [
+                future.result(timeout=10)
+                for future in (
+                    executor.submit(create_generation),
+                    executor.submit(create_generation),
+                )
+            ]
+
+        self.assertEqual(sorted(results), [False, True])
+        self.assertEqual(PromoCodeGeneration.objects.count(), 1)
 
 
 class PromoCodeApiTests(TestCase):

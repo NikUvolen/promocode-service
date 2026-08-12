@@ -104,7 +104,7 @@ test('landing is visible without horizontal overflow', async ({ page }, testInfo
 
   await expect(page.getByRole('heading', { level: 1, name: 'GEAR DROP' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Участвовать' }).first()).toBeVisible()
-  await expect(page.locator('.hero')).toHaveCSS('background-image', /gaming-hero\.png/)
+  await expect(page.locator('.hero')).toHaveCSS('background-image', /gear-drop-hero\.png/)
 
   const hasOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

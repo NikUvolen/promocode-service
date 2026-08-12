@@ -18,9 +18,10 @@ export default function AuthLayout({ eyebrow, title, description, children }) {
 
       <main className="auth-main">
         <section className="auth-side" aria-hidden="true">
+          <span className="auth-side__badge">Player one</span>
           <div className="auth-side__copy">
             <p className="eyebrow eyebrow--light">Промо для тех, кто играет</p>
-            <p className="auth-side__title">Твой код может стать новым девайсом.</p>
+            <p className="auth-side__title">Входи.<br />Активируй.<br />Выигрывай.</p>
           </div>
         </section>
 

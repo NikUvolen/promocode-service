@@ -12,6 +12,12 @@ export default function SiteHeader() {
       <div className="site-header__inner">
         <Brand />
         <nav className="site-nav" aria-label="Основная навигация">
+          <a className="site-nav__link" href="#how-it-works">
+            Как участвовать
+          </a>
+          <a className="site-nav__link" href="#prizes">
+            Призы
+          </a>
           <a className="site-nav__link" href="#winners">
             Победители
           </a>

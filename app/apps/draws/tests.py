@@ -63,6 +63,67 @@ class DrawsAdminTests(TestCase):
         )
 
 
+class PublicDrawApiTests(TestCase):
+    def test_lists_completed_draws_without_private_user_data(self):
+        user = User.objects.create_user(
+            email='winner@example.com',
+            password='StrongPassword_123!',
+        )
+        Profile.objects.create(
+            user=user,
+            first_name='Михаил',
+            last_name='Иванов',
+            phone='+7 (999) 123-45-67',
+            no_middle_name=True,
+        )
+        promo_code = PromoCode.objects.create(
+            code='PUBLIC01',
+            registered_by=user,
+            registered_at=timezone.now(),
+        )
+        draw = Draw.objects.create(
+            draw_date=datetime(2026, 8, 12).date(),
+            status=Draw.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+        Winner.objects.create(
+            draw=draw,
+            user=user,
+            promo_code=promo_code,
+            prize=Winner.Prize.AIRPODS,
+        )
+        Draw.objects.create(
+            draw_date=datetime(2026, 8, 11).date(),
+            status=Draw.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+        Draw.objects.create(
+            draw_date=datetime(2026, 8, 13).date(),
+            status=Draw.Status.PENDING,
+        )
+
+        response = self.client.get(reverse('public-draw-list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 2)
+        self.assertEqual(response.json()[0]['draw_date'], '2026-08-12')
+        self.assertEqual(
+            response.json()[0]['winners'],
+            [
+                {
+                    'name': 'Михаил И.',
+                    'prize_code': Winner.Prize.AIRPODS,
+                    'prize_name': 'AirPods',
+                }
+            ],
+        )
+        self.assertEqual(response.json()[1]['winners'], [])
+        payload = str(response.json())
+        self.assertNotIn(user.email, payload)
+        self.assertNotIn(Profile.objects.get(user=user).phone, payload)
+        self.assertNotIn(promo_code.code, payload)
+
+
 class DrawServiceTests(TransactionTestCase):
     draw_date = datetime(2026, 8, 12).date()
     moscow = ZoneInfo('Europe/Moscow')

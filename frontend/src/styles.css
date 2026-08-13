@@ -257,6 +257,12 @@ img { display: block; max-width: 100%; }
 .winner-empty strong, .winner-empty span { display: block; }
 .winner-empty strong { margin-bottom: 4px; font-size: 13px; }
 .winner-empty span { color: #62606a; font-size: 11px; line-height: 1.5; }
+.winner-list { display: grid; margin: 0; padding: 0; gap: 8px; list-style: none; }
+.winner-list li { display: flex; min-height: 62px; padding: 12px 14px; align-items: center; gap: 12px; color: var(--ink); background: var(--paper); border-radius: 7px; }
+.winner-list__icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; background: var(--yellow); border: 1px solid var(--ink); border-radius: 7px; }
+.winner-list strong, .winner-list li div > span { display: block; }
+.winner-list strong { font-size: 13px; }
+.winner-list li div > span { margin-top: 3px; color: #62606a; font-size: 11px; }
 
 .site-footer { display: grid; width: min(var(--container-width), calc(100% - (var(--page-gutter) * 2))); margin: 0 auto; padding: 42px 0; align-items: end; color: #8d8c94; border-top: 1px solid #2d2d32; font-size: 11px; grid-template-columns: 1fr 1fr auto; }
 .site-footer p { margin: 0; line-height: 1.6; }

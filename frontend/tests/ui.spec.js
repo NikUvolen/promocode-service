@@ -100,11 +100,27 @@ async function mockPromoApi(page, options = {}) {
 }
 
 test('landing is visible without horizontal overflow', async ({ page }, testInfo) => {
+  await page.route('**/api/v1/draws/', async (route) => {
+    await route.fulfill({
+      json: [
+        {
+          draw_date: '2026-08-12',
+          winners: [
+            { name: 'Михаил И.', prize_code: 'airpods', prize_name: 'AirPods' },
+          ],
+        },
+        { draw_date: '2026-08-11', winners: [] },
+      ],
+    })
+  })
   await page.goto('/')
 
   await expect(page.getByRole('heading', { level: 1, name: 'GEAR DROP' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Участвовать' }).first()).toBeVisible()
   await expect(page.locator('.hero')).toHaveCSS('background-image', /gear-drop-hero\.png/)
+  await expect(page.getByText('Михаил И.')).toBeVisible()
+  await page.getByRole('tab', { name: '11 августа' }).click()
+  await expect(page.getByText('Никто не выиграл')).toBeVisible()
 
   const hasOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

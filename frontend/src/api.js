@@ -102,3 +102,7 @@ export function promoApiRequest(path = '', options = {}) {
     : ''
   return request(`promo-codes${suffix}`, options)
 }
+
+export function drawsApiRequest(options = {}) {
+  return request('draws', options)
+}

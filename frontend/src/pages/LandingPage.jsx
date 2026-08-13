@@ -14,9 +14,10 @@ import {
   TicketCheck,
   Trophy,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { drawsApiRequest } from '../api'
 import Brand from '../components/Brand'
 import SiteHeader from '../components/SiteHeader'
 
@@ -41,15 +42,41 @@ const steps = [
   },
 ]
 
-const drawDays = ['11 августа', '12 августа', '13 августа']
-
 const prizes = [
   { icon: Headphones, title: 'AirPods', text: 'Одна пара каждый день' },
   { icon: Gift, title: '3 000 ₽', text: 'Сертификат на покупки' },
 ]
 
+function formatDrawDate(value) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Europe/Moscow',
+  }).format(new Date(`${value}T12:00:00+03:00`))
+}
+
 export default function LandingPage() {
   const [activeDay, setActiveDay] = useState(0)
+  const [draws, setDraws] = useState([])
+  const [drawsState, setDrawsState] = useState('loading')
+
+  useEffect(() => {
+    let active = true
+    drawsApiRequest()
+      .then((data) => {
+        if (!active) return
+        setDraws(data)
+        setDrawsState('ready')
+      })
+      .catch(() => {
+        if (active) setDrawsState('error')
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const activeDraw = draws[activeDay]
 
   return (
     <div className="landing">
@@ -154,28 +181,43 @@ export default function LandingPage() {
           <div className="winners-section__content">
             <p className="eyebrow eyebrow--light">Таблица лидеров</p>
             <h2>Победители<br />дня</h2>
-            <div className="draw-tabs" role="tablist" aria-label="Дни розыгрыша">
-              {drawDays.map((day, index) => (
+            {draws.length > 0 && <div className="draw-tabs" role="tablist" aria-label="Дни розыгрыша">
+              {draws.map((draw, index) => (
                 <button
                   className={activeDay === index ? 'draw-tab draw-tab--active' : 'draw-tab'}
-                  key={day}
+                  key={draw.draw_date}
                   type="button"
                   role="tab"
                   aria-selected={activeDay === index}
                   onClick={() => setActiveDay(index)}
                 >
-                  {day}
+                  {formatDrawDate(draw.draw_date)}
                 </button>
               ))}
-            </div>
-            <div className="draw-date"><CalendarDays size={18} /> {drawDays[activeDay]}</div>
-            <div className="winner-empty">
-              <Gift size={24} />
-              <div>
-                <strong>Розыгрыш еще впереди</strong>
-                <span>Результаты появятся здесь после 00:00 по Москве.</span>
-              </div>
-            </div>
+            </div>}
+            {activeDraw && <div className="draw-date"><CalendarDays size={18} /> {formatDrawDate(activeDraw.draw_date)}</div>}
+            {drawsState === 'loading' && (
+              <div className="winner-empty"><Gift size={24} /><div><strong>Загружаем результаты</strong><span>Подождите несколько секунд.</span></div></div>
+            )}
+            {drawsState === 'error' && (
+              <div className="winner-empty"><Gift size={24} /><div><strong>Не удалось загрузить результаты</strong><span>Обновите страницу немного позже.</span></div></div>
+            )}
+            {drawsState === 'ready' && !activeDraw && (
+              <div className="winner-empty"><Gift size={24} /><div><strong>Розыгрыш еще впереди</strong><span>Результаты появятся здесь после первого розыгрыша.</span></div></div>
+            )}
+            {activeDraw?.winners.length === 0 && (
+              <div className="winner-empty"><Gift size={24} /><div><strong>Никто не выиграл</strong><span>В этом розыгрыше победителей не было.</span></div></div>
+            )}
+            {activeDraw?.winners.length > 0 && (
+              <ul className="winner-list">
+                {activeDraw.winners.map((winner) => (
+                  <li key={`${activeDraw.draw_date}-${winner.prize_code}`}>
+                    <span className="winner-list__icon"><Trophy size={18} /></span>
+                    <div><strong>{winner.name}</strong><span>{winner.prize_name}</span></div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
       </main>

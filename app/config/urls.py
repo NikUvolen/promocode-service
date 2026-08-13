@@ -12,4 +12,5 @@ urlpatterns = [
     ),
     path('api/v1/', include('accounts.api.urls')),
     path('api/v1/', include('promo.api.urls')),
+    path('api/v1/', include('draws.api.urls')),
 ]

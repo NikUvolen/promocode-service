@@ -3,6 +3,12 @@ from django.urls import reverse
 
 
 class ApiDocumentationTests(TestCase):
+    def test_healthcheck(self):
+        response = self.client.get(reverse('healthcheck'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'status': 'ok'})
+
     def test_openapi_schema_contains_auth_endpoints(self):
         response = self.client.get(f"{reverse('schema')}?format=json")
 

@@ -39,6 +39,29 @@ class DrawsAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    @patch('draws.admin.timezone.now')
+    @patch('draws.admin.run_manual_draw_task.delay')
+    def test_starts_manual_draw_from_admin(self, delay, now):
+        cutoff = datetime(
+            2026, 8, 13, 9, 30, tzinfo=ZoneInfo('Europe/Moscow')
+        )
+        now.return_value = cutoff
+        delay.return_value = SimpleNamespace(id='manual-task-id')
+
+        response = self.client.post(
+            reverse('admin:draws_draw_run_manual_draw'),
+            {'_form_submitted': True},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse('admin:draws_draw_changelist'),
+        )
+        delay.assert_called_once_with(
+            '2026-08-13',
+            cutoff.isoformat(),
+        )
+
 
 class DrawServiceTests(TransactionTestCase):
     draw_date = datetime(2026, 8, 12).date()
@@ -158,6 +181,42 @@ class DrawServiceTests(TransactionTestCase):
         self.assertEqual(draw.winners.count(), 1)
         self.assertEqual(draw.winners.get().user, eligible_user)
         self.assertNotEqual(draw.winners.get().user, late_user)
+        self.assertEqual(
+            draw.period_started_at,
+            datetime(2026, 8, 12, 0, 0, tzinfo=self.moscow),
+        )
+        self.assertEqual(draw.period_ended_at, cutoff)
+
+    @patch('draws.services.draw.secrets.randbelow', return_value=0)
+    def test_next_draw_uses_codes_registered_after_manual_draw(
+        self,
+        random_offset,
+    ):
+        manual_cutoff = datetime(
+            2026, 8, 12, 12, 0, tzinfo=self.moscow
+        )
+        self.create_participant(1, manual_cutoff - timedelta(minutes=1))
+        manual_draw = run_draw(
+            draw_date=self.draw_date,
+            trigger=Draw.Trigger.MANUAL,
+            cutoff=manual_cutoff,
+        )
+        late_user, late_code = self.create_participant(
+            2,
+            manual_cutoff + timedelta(minutes=1),
+        )
+
+        next_draw = run_draw(
+            draw_date=self.draw_date + timedelta(days=1),
+            trigger=Draw.Trigger.AUTOMATIC,
+        )
+
+        self.assertEqual(manual_draw.period_ended_at, manual_cutoff)
+        self.assertEqual(next_draw.period_started_at, manual_cutoff)
+        self.assertEqual(next_draw.winners.count(), 1)
+        winner = next_draw.winners.get()
+        self.assertEqual(winner.user, late_user)
+        self.assertEqual(winner.promo_code, late_code)
 
     def test_repeat_run_returns_existing_result(self):
         self.create_participant(1)
@@ -307,6 +366,7 @@ class DailyDrawTaskTests(TestCase):
                 'draw_id': 42,
                 'draw_date': '2026-08-11',
                 'winner_count': 2,
+                'already_completed': False,
             },
         )
 

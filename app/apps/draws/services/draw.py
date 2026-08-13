@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from draws.models import Draw, Winner
-from draws.services.locks import lock_draw_date
+from draws.services.locks import lock_draw_operation
 from draws.services.notifications import schedule_winner_emails
 from promo.models import PromoCode
 
@@ -35,13 +35,29 @@ def get_draw_period(draw_date, cutoff=None):
     return starts_at, cutoff
 
 
+def get_period_start(*, draw_date, ends_at):
+    previous_end = (
+        Draw.objects.filter(
+            status=Draw.Status.COMPLETED,
+            period_ended_at__isnull=False,
+            period_ended_at__lt=ends_at,
+        )
+        .order_by('-period_ended_at')
+        .values_list('period_ended_at', flat=True)
+        .first()
+    )
+    if previous_end is not None:
+        return previous_end
+    return get_draw_period(draw_date)[0]
+
+
 def run_draw(*, draw_date, trigger, cutoff=None):
     if trigger == Draw.Trigger.MANUAL and cutoff is None:
         cutoff = timezone.now()
-    starts_at, ends_at = get_draw_period(draw_date, cutoff)
+    _, ends_at = get_draw_period(draw_date, cutoff)
 
     with transaction.atomic():
-        lock_draw_date(draw_date)
+        lock_draw_operation()
         draw, _ = Draw.objects.get_or_create(
             draw_date=draw_date,
             defaults={'trigger': trigger},
@@ -51,17 +67,30 @@ def run_draw(*, draw_date, trigger, cutoff=None):
             _schedule_unnotified_winners(draw)
             return draw
 
+        starts_at = get_period_start(
+            draw_date=draw_date,
+            ends_at=ends_at,
+        )
+        if starts_at >= ends_at:
+            raise InvalidDrawPeriod(
+                'Draw period must start before its cutoff.'
+            )
+
         started_at = timezone.now()
         draw.status = Draw.Status.RUNNING
         draw.trigger = trigger
         draw.started_at = draw.started_at or started_at
         draw.completed_at = None
+        draw.period_started_at = starts_at
+        draw.period_ended_at = ends_at
         draw.save(
             update_fields=(
                 'status',
                 'trigger',
                 'started_at',
                 'completed_at',
+                'period_started_at',
+                'period_ended_at',
                 'updated_at',
             )
         )

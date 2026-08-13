@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from os import getenv
 
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 
@@ -189,6 +190,13 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ALWAYS_EAGER = env_bool('CELERY_TASK_ALWAYS_EAGER', False)
 CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_BEAT_SCHEDULE = {
+    'run-daily-draw-at-moscow-midnight': {
+        'task': 'draws.tasks.run_daily_draw_task',
+        'schedule': crontab(hour=0, minute=0),
+        'options': {'expires': 60 * 60},
+    },
+}
 
 AUTH_USER_MODEL = 'accounts.User'
 

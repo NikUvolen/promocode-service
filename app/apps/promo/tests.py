@@ -471,10 +471,14 @@ class PromoCodeApiTests(TestCase):
 
     def test_lists_participating_lost_and_winning_statuses(self):
         completed_at = timezone.now() - timedelta(days=1)
+        period_started_at = completed_at - timedelta(days=1)
+        period_ended_at = completed_at + timedelta(minutes=1)
         draw = Draw.objects.create(
             draw_date=timezone.localdate(completed_at),
             status=Draw.Status.COMPLETED,
             completed_at=timezone.now(),
+            period_started_at=period_started_at,
+            period_ended_at=period_ended_at,
         )
         lost_code = PromoCode.objects.create(
             code='LOST1234',
@@ -491,6 +495,8 @@ class PromoCodeApiTests(TestCase):
             draw_date=timezone.localdate(current_time),
             status=Draw.Status.COMPLETED,
             completed_at=current_time - timedelta(hours=1),
+            period_started_at=period_ended_at,
+            period_ended_at=current_time - timedelta(hours=1),
             trigger=Draw.Trigger.MANUAL,
         )
         participating_code = PromoCode.objects.create(

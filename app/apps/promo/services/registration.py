@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Profile, User
+from draws.services.locks import lock_draw_operation
 from promo.models import PromoCode, PromoCodeAttempt
 
 
@@ -213,6 +214,8 @@ def register_promo_code(*, user, raw_code, ip_address=None):
 
     with transaction.atomic():
         locked_user = User.objects.select_for_update().get(pk=user.pk)
+        now = timezone.now()
+        lock_draw_operation(shared=True)
         now = timezone.now()
         result = _register_locked(
             user=locked_user,

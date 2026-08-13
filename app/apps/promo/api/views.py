@@ -1,8 +1,4 @@
-from zoneinfo import ZoneInfo
-
-from django.conf import settings
 from django.db.models import Exists, OuterRef
-from django.db.models.functions import TruncDate
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -43,20 +39,14 @@ class PromoCodeViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return (
             PromoCode.objects.filter(registered_by=self.request.user)
             .annotate(
-                registration_draw_date=TruncDate(
-                    'registered_at',
-                    tzinfo=ZoneInfo(settings.TIME_ZONE),
-                )
-            )
-            .annotate(
                 has_won=Exists(
                     Winner.objects.filter(promo_code_id=OuterRef('pk'))
                 ),
                 draw_completed=Exists(
                     Draw.objects.filter(
-                        draw_date=OuterRef('registration_draw_date'),
                         status=Draw.Status.COMPLETED,
-                        completed_at__gte=OuterRef('registered_at'),
+                        period_started_at__lte=OuterRef('registered_at'),
+                        period_ended_at__gt=OuterRef('registered_at'),
                     )
                 ),
             )

@@ -124,11 +124,19 @@ DATABASES = {
 
 REDIS_URL = getenv('REDIS_URL', 'redis://localhost:6379')
 
+CACHE_URL = getenv('CACHE_URL')
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': getenv('CACHE_URL', f'{REDIS_URL}/1'),
-    },
+    'default': (
+        {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': CACHE_URL,
+        }
+        if CACHE_URL and not IS_TESTING
+        else {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'promocode-service-local',
+        }
+    ),
 }
 
 
@@ -276,6 +284,9 @@ EMAIL_VERIFICATION_TIMEOUT = int(
     getenv('EMAIL_VERIFICATION_TIMEOUT', str(24 * 60 * 60))
 )
 PASSWORD_RESET_TIMEOUT = int(getenv('PASSWORD_RESET_TIMEOUT', '3600'))
+PASSWORD_RESET_RESEND_INTERVAL = int(
+    getenv('PASSWORD_RESET_RESEND_INTERVAL', '60')
+)
 
 
 # Celery
@@ -288,6 +299,17 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'socket_connect_timeout': 2,
+    'socket_timeout': 5,
+}
+CELERY_TASK_PUBLISH_RETRY = True
+CELERY_TASK_PUBLISH_RETRY_POLICY = {
+    'max_retries': 3,
+    'interval_start': 0.2,
+    'interval_step': 0.5,
+    'interval_max': 2,
+}
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ALWAYS_EAGER = env_bool('CELERY_TASK_ALWAYS_EAGER', False)
 CELERY_TASK_EAGER_PROPAGATES = True
@@ -305,6 +327,9 @@ CELERY_TASK_ROUTES = {
         'queue': 'notifications',
     },
     'draws.tasks.send_winner_email_task': {'queue': 'notifications'},
+    'draws.tasks.retry_unnotified_winner_emails_task': {
+        'queue': 'notifications',
+    },
     'promo.tasks.generate_promo_codes_task': {'queue': 'bulk'},
     'promo.tasks.import_promo_codes_task': {'queue': 'bulk'},
     'draws.tasks.generate_draw_report_task': {'queue': 'bulk'},
@@ -322,6 +347,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'promo.tasks.cleanup_expired_import_files_task',
         'schedule': crontab(hour=3, minute=30),
         'options': {'expires': 60 * 60},
+    },
+    'retry-unnotified-winner-emails': {
+        'task': 'draws.tasks.retry_unnotified_winner_emails_task',
+        'schedule': crontab(minute='*/5'),
+        'options': {'expires': 5 * 60},
     },
     'cleanup-expired-report-files': {
         'task': 'draws.tasks.cleanup_expired_report_files_task',
@@ -351,6 +381,12 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_register': getenv('AUTH_REGISTER_RATE', '5/hour'),
+        'auth_login': getenv('AUTH_LOGIN_RATE', '10/minute'),
+        'auth_email': getenv('AUTH_EMAIL_RATE', '5/hour'),
+        'auth_refresh': getenv('AUTH_REFRESH_RATE', '30/minute'),
+    },
 }
 
 SIMPLE_JWT = {

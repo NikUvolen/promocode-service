@@ -28,12 +28,10 @@ def register_user(*, email, password, personal_data_consent):
                 user=user,
                 personal_data_consent_at=timezone.now(),
             )
-            transaction.on_commit(
-                lambda: schedule_verification_email(user.pk)
-            )
     except IntegrityError as exc:
         raise EmailAlreadyRegistered from exc
 
+    user.verification_email_queued = schedule_verification_email(user.pk)
     return user
 
 
@@ -44,5 +42,6 @@ def resend_verification_email(email):
         is_active=True,
         is_email_verified=False,
     ).first()
-    if user is not None:
-        schedule_verification_email(user.pk)
+    if user is None:
+        return True
+    return schedule_verification_email(user.pk)

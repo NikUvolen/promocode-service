@@ -1,5 +1,7 @@
 const API_ROOT = '/api/v1'
 const TOKEN_KEY = 'gear-drop.tokens'
+const SESSION_CLEARED_EVENT = 'gear-drop:session-cleared'
+let refreshPromise = null
 
 export class ApiError extends Error {
   constructor(payload, status) {
@@ -34,6 +36,7 @@ export function saveTokens(tokens) {
 
 export function clearTokens() {
   localStorage.removeItem(TOKEN_KEY)
+  window.dispatchEvent(new Event(SESSION_CLEARED_EVENT))
 }
 
 async function parseResponse(response) {
@@ -44,6 +47,17 @@ async function parseResponse(response) {
 }
 
 async function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = performTokenRefresh()
+  try {
+    return await refreshPromise
+  } finally {
+    refreshPromise = null
+  }
+}
+
+async function performTokenRefresh() {
   const tokens = getTokens()
   if (!tokens?.refresh) return null
 
@@ -61,6 +75,11 @@ async function refreshAccessToken() {
   const nextTokens = await response.json()
   saveTokens(nextTokens)
   return nextTokens.access
+}
+
+export function onSessionCleared(listener) {
+  window.addEventListener(SESSION_CLEARED_EVENT, listener)
+  return () => window.removeEventListener(SESSION_CLEARED_EVENT, listener)
 }
 
 async function request(endpoint, options = {}) {

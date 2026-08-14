@@ -3,11 +3,16 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from accounts.models import Profile
 from accounts.services.registration import resend_verification_email
-from accounts.services.passwords import request_password_reset
+from accounts.services.passwords import (
+    EmailQueueUnavailable,
+    PasswordResetRateLimited,
+    request_password_reset,
+)
 
 from .serializers import (
     ChangePasswordSerializer,
@@ -30,13 +35,19 @@ from .serializers import (
 class AuthViewSet(viewsets.GenericViewSet):
     authentication_classes = ()
     permission_classes = (AllowAny,)
+    throttle_scope = None
 
     @extend_schema(
         tags=('Авторизация',),
         request=RegisterSerializer,
         responses={201: RegistrationResponseSerializer},
     )
-    @action(detail=False, methods=('post',))
+    @action(
+        detail=False,
+        methods=('post',),
+        throttle_classes=(ScopedRateThrottle,),
+        throttle_scope='auth_register',
+    )
     def register(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -44,7 +55,13 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(
             {
                 'email': user.email,
-                'detail': 'Письмо для подтверждения email отправлено.',
+                'email_queued': user.verification_email_queued,
+                'detail': (
+                    'Письмо для подтверждения email поставлено в очередь.'
+                    if user.verification_email_queued
+                    else 'Аккаунт создан, но письмо пока не отправлено. '
+                    'Запросите его повторно через минуту.'
+                ),
             },
             status=status.HTTP_201_CREATED,
         )
@@ -70,11 +87,18 @@ class AuthViewSet(viewsets.GenericViewSet):
         detail=False,
         methods=('post',),
         url_path='resend-verification',
+        throttle_classes=(ScopedRateThrottle,),
+        throttle_scope='auth_email',
     )
     def resend_verification(self, request):
         serializer = ResendVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        resend_verification_email(serializer.validated_data['email'])
+        queued = resend_verification_email(serializer.validated_data['email'])
+        if not queued:
+            return Response(
+                {'detail': 'Сервис отправки писем временно недоступен.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             {
                 'detail': (
@@ -89,11 +113,31 @@ class AuthViewSet(viewsets.GenericViewSet):
         request=PasswordResetRequestSerializer,
         responses={200: DetailResponseSerializer},
     )
-    @action(detail=False, methods=('post',), url_path='password-reset')
+    @action(
+        detail=False,
+        methods=('post',),
+        url_path='password-reset',
+        throttle_classes=(ScopedRateThrottle,),
+        throttle_scope='auth_email',
+    )
     def password_reset(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        request_password_reset(serializer.validated_data['email'])
+        try:
+            request_password_reset(serializer.validated_data['email'])
+        except PasswordResetRateLimited as exc:
+            return Response(
+                {
+                    'detail': 'Повторить отправку можно через одну минуту.',
+                    'retry_after': exc.retry_after,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except EmailQueueUnavailable:
+            return Response(
+                {'detail': 'Сервис отправки писем временно недоступен.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             {
                 'detail': (
@@ -197,7 +241,12 @@ class AuthViewSet(viewsets.GenericViewSet):
         request=LoginSerializer,
         responses={200: TokenPairResponseSerializer},
     )
-    @action(detail=False, methods=('post',))
+    @action(
+        detail=False,
+        methods=('post',),
+        throttle_classes=(ScopedRateThrottle,),
+        throttle_scope='auth_login',
+    )
     def login(self, request):
         serializer = LoginSerializer(
             data=request.data,
@@ -211,7 +260,12 @@ class AuthViewSet(viewsets.GenericViewSet):
         request=RefreshSerializer,
         responses={200: TokenPairResponseSerializer},
     )
-    @action(detail=False, methods=('post',))
+    @action(
+        detail=False,
+        methods=('post',),
+        throttle_classes=(ScopedRateThrottle,),
+        throttle_scope='auth_refresh',
+    )
     def refresh(self, request):
         serializer = RefreshSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

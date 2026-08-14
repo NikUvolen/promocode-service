@@ -97,10 +97,36 @@ services:
       - config
       - worker
       - --loglevel=INFO
-      - --queues=critical,notifications
+      - --queues=critical
       - --concurrency=1
       - --prefetch-multiplier=1
       - --hostname=critical@%h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-notifications:
+    image: promocode-service-backend
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    logging: *log-options
+    env_file:
+      - path: ${ENV_FILE:-.env.production}
+        format: raw
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=INFO
+      - --queues=notifications
+      - --concurrency=2
+      - --prefetch-multiplier=1
+      - --hostname=notifications@%h
     depends_on:
       migrate:
         condition: service_completed_successfully

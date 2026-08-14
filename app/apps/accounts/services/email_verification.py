@@ -52,12 +52,18 @@ def schedule_verification_email(user_id):
     from accounts.tasks import send_verification_email_task
 
     try:
-        send_verification_email_task.delay(user_id)
+        send_verification_email_task.apply_async(
+            args=(user_id,),
+            retry=True,
+            retry_policy={'max_retries': 3, 'interval_start': 0.2},
+        )
     except Exception:
         logger.exception(
             'Failed to enqueue verification email for user %s',
             user_id,
         )
+        return False
+    return True
 
 
 def verify_email(token):

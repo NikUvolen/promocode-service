@@ -1,4 +1,5 @@
 import logging
+import hashlib
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -6,6 +7,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
+from django.core.cache import cache
 from django.db import transaction
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -28,6 +30,16 @@ class InvalidNewPassword(Exception):
 
 
 class InvalidOldPassword(Exception):
+    pass
+
+
+class PasswordResetRateLimited(Exception):
+    def __init__(self, retry_after):
+        self.retry_after = retry_after
+        super().__init__('Password reset email requested too frequently.')
+
+
+class EmailQueueUnavailable(Exception):
     pass
 
 
@@ -66,23 +78,37 @@ def schedule_password_reset_email(user_id):
     from accounts.tasks import send_password_reset_email_task
 
     try:
-        send_password_reset_email_task.delay(user_id)
+        send_password_reset_email_task.apply_async(
+            args=(user_id,),
+            retry=True,
+            retry_policy={'max_retries': 3, 'interval_start': 0.2},
+        )
     except Exception:
         logger.exception(
             'Failed to enqueue password reset email for user %s',
             user_id,
         )
+        return False
+    return True
 
 
 def request_password_reset(email):
     normalized_email = User.objects.normalize_email(email).lower()
+    email_digest = hashlib.sha256(normalized_email.encode()).hexdigest()
+    cooldown_key = f'password-reset-cooldown:{email_digest}'
+    cooldown = settings.PASSWORD_RESET_RESEND_INTERVAL
+    if not cache.add(cooldown_key, True, timeout=cooldown):
+        raise PasswordResetRateLimited(cooldown)
+
     user = User.objects.filter(
         email=normalized_email,
         is_active=True,
         is_email_verified=True,
     ).first()
     if user is not None and user.has_usable_password():
-        schedule_password_reset_email(user.pk)
+        if not schedule_password_reset_email(user.pk):
+            cache.delete(cooldown_key)
+            raise EmailQueueUnavailable
 
 
 def reset_password(*, uid, token, new_password):

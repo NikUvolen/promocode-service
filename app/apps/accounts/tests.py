@@ -52,6 +52,7 @@ class RegistrationApiTests(TestCase):
                 {
                     'email': 'USER@Example.com',
                     'password': 'StrongPassword_123!',
+                    'confirm_password': 'StrongPassword_123!',
                     'personal_data_consent': True,
                 },
                 content_type='application/json',
@@ -70,6 +71,7 @@ class RegistrationApiTests(TestCase):
             {
                 'email': 'user@example.com',
                 'password': 'StrongPassword_123!',
+                'confirm_password': 'StrongPassword_123!',
                 'personal_data_consent': False,
             },
             content_type='application/json',
@@ -89,6 +91,7 @@ class RegistrationApiTests(TestCase):
             {
                 'email': 'USER@example.com',
                 'password': 'StrongPassword_123!',
+                'confirm_password': 'StrongPassword_123!',
                 'personal_data_consent': True,
             },
             content_type='application/json',
@@ -96,6 +99,22 @@ class RegistrationApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(User.objects.count(), 1)
+
+    def test_rejects_mismatched_password_confirmation(self):
+        response = self.client.post(
+            self.register_url,
+            {
+                'email': 'user@example.com',
+                'password': 'StrongPassword_123!',
+                'confirm_password': 'DifferentPassword_123!',
+                'personal_data_consent': True,
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('confirm_password', response.json())
+        self.assertFalse(User.objects.exists())
 
     def test_verifies_email_with_valid_token(self):
         user = User.objects.create_user(
@@ -187,6 +206,13 @@ class JwtAuthApiTests(TestCase):
         user.refresh_from_db()
         self.assertIsNotNone(user.last_login)
 
+    def test_login_email_is_case_insensitive(self):
+        self.create_user()
+
+        response = self.login(email='USER@EXAMPLE.COM')
+
+        self.assertEqual(response.status_code, 200)
+
     def test_login_rejects_invalid_credentials(self):
         self.create_user()
 
@@ -237,11 +263,32 @@ class PasswordResetApiTests(TestCase):
     refresh_url = reverse('auth-refresh')
 
     def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
         self.user = User.objects.create_user(
             email='user@example.com',
             password='OldPassword_123!',
             is_email_verified=True,
         )
+
+    @patch('accounts.services.passwords.schedule_password_reset_email')
+    def test_repeated_request_is_rate_limited_for_one_minute(self, schedule_email):
+        first_response = self.client.post(
+            self.request_url,
+            {'email': self.user.email},
+            content_type='application/json',
+        )
+        second_response = self.client.post(
+            self.request_url,
+            {'email': self.user.email},
+            content_type='application/json',
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 429)
+        self.assertEqual(second_response.json()['retry_after'], 60)
+        schedule_email.assert_called_once_with(self.user.pk)
 
     @patch('accounts.services.passwords.schedule_password_reset_email')
     def test_requests_password_reset(self, schedule_email):

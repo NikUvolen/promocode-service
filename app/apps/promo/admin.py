@@ -207,14 +207,13 @@ class PromoCodeAdmin(ModelAdmin):
 class PromoCodeAttemptAdmin(ModelAdmin):
     list_display = ('user', 'normalized_code', 'result', 'reason', 'created_at')
     list_filter = ('result', 'reason', 'created_at')
-    search_fields = ('user__email', 'normalized_code', 'ip_address')
+    search_fields = ('user__email', 'normalized_code')
     readonly_fields = (
         'user',
         'raw_code',
         'normalized_code',
         'result',
         'reason',
-        'ip_address',
         'created_at',
     )
     list_select_related = ('user',)

@@ -1,9 +1,10 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 import {
   apiRequest,
   clearTokens,
   getTokens,
+  onSessionCleared,
   saveTokens,
 } from './api'
 
@@ -11,6 +12,11 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [authenticated, setAuthenticated] = useState(() => Boolean(getTokens()))
+
+  useEffect(
+    () => onSessionCleared(() => setAuthenticated(false)),
+    [],
+  )
 
   const value = useMemo(
     () => ({

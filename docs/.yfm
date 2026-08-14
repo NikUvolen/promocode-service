@@ -1,0 +1,3 @@
+allowHtml: false
+sanitizeHtml: true
+idGenerator: deterministic

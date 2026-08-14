@@ -1,0 +1,17 @@
+title: Gear Drop
+href: index.yaml
+items:
+  - name: Обзор проекта
+    href: overview.md
+  - name: Архитектура
+    href: architecture.md
+  - name: Локальная разработка
+    href: local-development.md
+  - name: API и авторизация
+    href: api.md
+  - name: Администрирование
+    href: administration.md
+  - name: Celery и обслуживание
+    href: background-jobs.md
+  - name: Развертывание
+    href: deployment.md

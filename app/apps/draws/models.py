@@ -107,3 +107,44 @@ class Winner(models.Model):
             ),
         ]
         ordering = ['-won_at']
+
+
+class DrawReport(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = 'queued', 'В очереди'
+        RUNNING = 'running', 'Выполняется'
+        COMPLETED = 'completed', 'Завершено'
+        FAILED = 'failed', 'Ошибка'
+
+    date_from = models.DateField(null=True, blank=True)
+    date_to = models.DateField(null=True, blank=True)
+    report_file = models.FileField(
+        upload_to='draw_reports/%Y/%m/%d',
+        blank=True,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='draw_reports',
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        date_from = self.date_from or 'начало акции'
+        date_to = self.date_to or 'текущая дата'
+        return f'{date_from} - {date_to} | {self.get_status_display()}'
+
+    class Meta:
+        verbose_name = 'draw report'
+        verbose_name_plural = 'draw reports'
+        ordering = ('-created_at',)

@@ -159,3 +159,45 @@ class PromoCodeGeneration(models.Model):
                 name='unique_active_promo_code_generation',
             ),
         ]
+
+
+class PromoCodeImport(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = 'queued', 'В очереди'
+        RUNNING = 'running', 'Выполняется'
+        COMPLETED = 'completed', 'Завершено'
+        FAILED = 'failed', 'Ошибка'
+
+    source_file = models.FileField(upload_to='promo_imports/source/%Y/%m/%d')
+    original_filename = models.CharField(max_length=255)
+    error_file = models.FileField(
+        upload_to='promo_imports/errors/%Y/%m/%d',
+        blank=True,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    processed_count = models.PositiveIntegerField(default=0)
+    imported_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='promo_code_imports',
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.original_filename} | {self.get_status_display()}'
+
+    class Meta:
+        verbose_name = 'promo code import'
+        verbose_name_plural = 'promo code imports'
+        ordering = ('-created_at',)

@@ -37,6 +37,19 @@ class PromoAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_generation_dialog_uses_relative_htmx_path(self):
+        response = self.client.get(
+            reverse('admin:promo_promocode_generate_codes'),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn(
+            'hx-post="/admin/promo/promocode/generate_codes/"',
+            body,
+        )
+        self.assertNotIn('hx-post="http', body)
+
     @patch('promo.admin.generate_promo_codes_task.delay')
     def test_starts_promo_code_generation_from_admin(self, delay):
         delay.return_value = SimpleNamespace(id='celery-task-id')

@@ -12,5 +12,7 @@ dependencies = [
     "djangorestframework-simplejwt>=5.5.1",
     "dotenv>=0.9.9",
     "drf-spectacular[sidecar]>=0.30.0",
+    "gunicorn>=23.0.0",
     "psycopg2>=2.9.12",
+    "whitenoise>=6.9.0",
 ]

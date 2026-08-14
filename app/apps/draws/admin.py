@@ -11,6 +11,9 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
+from core.audit import log_audit_event
+from core.models import AuditLog
+
 from .forms import DrawReportForm
 from .models import Draw, DrawReport, Winner
 from .tasks import generate_draw_report_task, run_manual_draw_task
@@ -90,12 +93,32 @@ class DrawAdmin(ModelAdmin):
                 draw_date.isoformat(),
                 cutoff.isoformat(),
             )
-        except Exception:
+        except Exception as error:
+            log_audit_event(
+                AuditLog.EventType.DRAW_FAILED,
+                actor=request.user,
+                metadata={
+                    'draw_date': draw_date.isoformat(),
+                    'trigger': Draw.Trigger.MANUAL,
+                    'cutoff': cutoff.isoformat(),
+                    'error': str(error)[:500],
+                },
+            )
             messages.error(
                 request,
                 'Не удалось отправить задачу в Celery. Проверьте Redis и worker.',
             )
         else:
+            log_audit_event(
+                AuditLog.EventType.DRAW_QUEUED,
+                actor=request.user,
+                metadata={
+                    'draw_date': draw_date.isoformat(),
+                    'trigger': Draw.Trigger.MANUAL,
+                    'cutoff': cutoff.isoformat(),
+                    'celery_task_id': task.id,
+                },
+            )
             messages.success(
                 request,
                 f'Розыгрыш поставлен в очередь. ID задачи: {task.id}.',
@@ -130,6 +153,12 @@ class DrawAdmin(ModelAdmin):
             report.error = str(error)[:2000]
             report.finished_at = timezone.now()
             report.save(update_fields=('status', 'error', 'finished_at'))
+            log_audit_event(
+                AuditLog.EventType.DRAW_REPORT_FAILED,
+                actor=request.user,
+                target=report,
+                metadata={'error': str(error)[:500]},
+            )
             messages.error(
                 request,
                 'Не удалось отправить отчёт в Celery. Проверьте Redis и worker.',
@@ -137,6 +166,24 @@ class DrawAdmin(ModelAdmin):
         else:
             report.celery_task_id = task.id
             report.save(update_fields=('celery_task_id',))
+            log_audit_event(
+                AuditLog.EventType.DRAW_REPORT_QUEUED,
+                actor=request.user,
+                target=report,
+                metadata={
+                    'date_from': (
+                        report.date_from.isoformat()
+                        if report.date_from
+                        else None
+                    ),
+                    'date_to': (
+                        report.date_to.isoformat()
+                        if report.date_to
+                        else None
+                    ),
+                    'celery_task_id': task.id,
+                },
+            )
             messages.success(
                 request,
                 'Отчёт поставлен в очередь. После завершения Celery ссылка '

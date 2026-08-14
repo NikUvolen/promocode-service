@@ -7,6 +7,8 @@ from django.conf import settings
 from django.db import OperationalError
 from django.utils import timezone
 
+from core.audit import log_audit_event
+from core.models import AuditLog
 from draws.models import Draw, DrawReport
 from draws.services.draw import run_draw
 from draws.services.notifications import send_winner_email
@@ -41,9 +43,30 @@ def run_daily_draw_task():
         draw_date=draw_date,
         status=Draw.Status.COMPLETED,
     ).exists()
-    draw = run_draw(
-        draw_date=draw_date,
-        trigger=Draw.Trigger.AUTOMATIC,
+    try:
+        draw = run_draw(
+            draw_date=draw_date,
+            trigger=Draw.Trigger.AUTOMATIC,
+        )
+    except Exception as error:
+        log_audit_event(
+            AuditLog.EventType.DRAW_FAILED,
+            metadata={
+                'draw_date': draw_date.isoformat(),
+                'trigger': Draw.Trigger.AUTOMATIC,
+                'error': str(error)[:500],
+            },
+        )
+        raise
+    log_audit_event(
+        AuditLog.EventType.DRAW_COMPLETED,
+        target=draw,
+        metadata={
+            'draw_date': draw.draw_date.isoformat(),
+            'trigger': Draw.Trigger.AUTOMATIC,
+            'winner_count': draw.winners.count(),
+            'already_completed': already_completed,
+        },
     )
     return {
         'draw_id': draw.pk,
@@ -67,10 +90,32 @@ def run_manual_draw_task(draw_date, cutoff):
         draw_date=draw_date,
         status=Draw.Status.COMPLETED,
     ).exists()
-    draw = run_draw(
-        draw_date=draw_date,
-        trigger=Draw.Trigger.MANUAL,
-        cutoff=datetime.fromisoformat(cutoff),
+    try:
+        draw = run_draw(
+            draw_date=draw_date,
+            trigger=Draw.Trigger.MANUAL,
+            cutoff=datetime.fromisoformat(cutoff),
+        )
+    except Exception as error:
+        log_audit_event(
+            AuditLog.EventType.DRAW_FAILED,
+            metadata={
+                'draw_date': draw_date.isoformat(),
+                'trigger': Draw.Trigger.MANUAL,
+                'cutoff': cutoff,
+                'error': str(error)[:500],
+            },
+        )
+        raise
+    log_audit_event(
+        AuditLog.EventType.DRAW_COMPLETED,
+        target=draw,
+        metadata={
+            'draw_date': draw.draw_date.isoformat(),
+            'trigger': Draw.Trigger.MANUAL,
+            'winner_count': draw.winners.count(),
+            'already_completed': already_completed,
+        },
     )
     return {
         'draw_id': draw.pk,
@@ -90,6 +135,12 @@ def generate_draw_report_task(report_id):
     report.started_at = report.started_at or timezone.now()
     report.error = ''
     report.save(update_fields=('status', 'started_at', 'error'))
+    log_audit_event(
+        AuditLog.EventType.DRAW_REPORT_STARTED,
+        actor=report.created_by,
+        target=report,
+        metadata={},
+    )
 
     try:
         filename = generate_draw_report(report_id)
@@ -99,11 +150,23 @@ def generate_draw_report_task(report_id):
             error=str(error)[:2000],
             finished_at=timezone.now(),
         )
+        log_audit_event(
+            AuditLog.EventType.DRAW_REPORT_FAILED,
+            actor=report.created_by,
+            target=report,
+            metadata={'error': str(error)[:500]},
+        )
         raise
 
     DrawReport.objects.filter(pk=report_id).update(
         status=DrawReport.Status.COMPLETED,
         finished_at=timezone.now(),
+    )
+    log_audit_event(
+        AuditLog.EventType.DRAW_REPORT_COMPLETED,
+        actor=report.created_by,
+        target=report,
+        metadata={'filename': filename},
     )
     return filename
 

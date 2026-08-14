@@ -5,6 +5,8 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
+from core.audit import log_audit_event
+from core.models import AuditLog
 from promo.models import PromoCodeGeneration, PromoCodeImport
 from promo.services.generation import (
     generate_promo_codes,
@@ -40,6 +42,12 @@ def _run_promo_code_generation(generation_id):
     generation.started_at = generation.started_at or timezone.now()
     generation.error = ''
     generation.save(update_fields=('status', 'started_at', 'error'))
+    log_audit_event(
+        AuditLog.EventType.PROMO_GENERATION_STARTED,
+        actor=generation.created_by,
+        target=generation,
+        metadata={'requested_count': generation.requested_count},
+    )
 
     try:
         generated_count = generate_promo_codes(generation.pk)
@@ -49,12 +57,30 @@ def _run_promo_code_generation(generation_id):
             error=str(error)[:2000],
             finished_at=timezone.now(),
         )
+        log_audit_event(
+            AuditLog.EventType.PROMO_GENERATION_FAILED,
+            actor=generation.created_by,
+            target=generation,
+            metadata={
+                'requested_count': generation.requested_count,
+                'error': str(error)[:500],
+            },
+        )
         raise
 
     PromoCodeGeneration.objects.filter(pk=generation.pk).update(
         status=PromoCodeGeneration.Status.COMPLETED,
         generated_count=generated_count,
         finished_at=timezone.now(),
+    )
+    log_audit_event(
+        AuditLog.EventType.PROMO_GENERATION_COMPLETED,
+        actor=generation.created_by,
+        target=generation,
+        metadata={
+            'requested_count': generation.requested_count,
+            'generated_count': generated_count,
+        },
     )
     return generated_count
 
@@ -69,6 +95,12 @@ def import_promo_codes_task(import_id):
     import_job.started_at = import_job.started_at or timezone.now()
     import_job.error = ''
     import_job.save(update_fields=('status', 'started_at', 'error'))
+    log_audit_event(
+        AuditLog.EventType.PROMO_IMPORT_STARTED,
+        actor=import_job.created_by,
+        target=import_job,
+        metadata={'original_filename': import_job.original_filename},
+    )
 
     try:
         result = import_promo_codes(import_id)
@@ -78,11 +110,26 @@ def import_promo_codes_task(import_id):
             error=str(error)[:2000],
             finished_at=timezone.now(),
         )
+        log_audit_event(
+            AuditLog.EventType.PROMO_IMPORT_FAILED,
+            actor=import_job.created_by,
+            target=import_job,
+            metadata={
+                'original_filename': import_job.original_filename,
+                'error': str(error)[:500],
+            },
+        )
         raise
 
     PromoCodeImport.objects.filter(pk=import_id).update(
         status=PromoCodeImport.Status.COMPLETED,
         finished_at=timezone.now(),
+    )
+    log_audit_event(
+        AuditLog.EventType.PROMO_IMPORT_COMPLETED,
+        actor=import_job.created_by,
+        target=import_job,
+        metadata=result,
     )
     return result
 

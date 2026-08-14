@@ -221,6 +221,26 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ALWAYS_EAGER = env_bool('CELERY_TASK_ALWAYS_EAGER', False)
 CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_DEFAULT_QUEUE = 'bulk'
+CELERY_TASK_ROUTES = {
+    'draws.tasks.run_daily_draw_task': {'queue': 'critical'},
+    'draws.tasks.run_manual_draw_task': {'queue': 'critical'},
+    'accounts.tasks.send_verification_email_task': {
+        'queue': 'notifications',
+    },
+    'accounts.tasks.send_password_reset_email_task': {
+        'queue': 'notifications',
+    },
+    'promo.tasks.send_registration_email_task': {
+        'queue': 'notifications',
+    },
+    'draws.tasks.send_winner_email_task': {'queue': 'notifications'},
+    'promo.tasks.generate_promo_codes_task': {'queue': 'bulk'},
+    'promo.tasks.import_promo_codes_task': {'queue': 'bulk'},
+    'draws.tasks.generate_draw_report_task': {'queue': 'bulk'},
+    'promo.tasks.cleanup_expired_import_files_task': {'queue': 'bulk'},
+    'draws.tasks.cleanup_expired_report_files_task': {'queue': 'bulk'},
+}
 CELERY_BEAT_SCHEDULE = {
     'run-daily-draw-at-moscow-midnight': {
         'task': 'draws.tasks.run_daily_draw_task',

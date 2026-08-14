@@ -42,7 +42,7 @@ services:
       - >-
         exec gunicorn config.wsgi:application
         --bind 0.0.0.0:8000
-        --workers $${GUNICORN_WORKERS:-3}
+        --workers $${GUNICORN_WORKERS:-2}
         --timeout $${GUNICORN_TIMEOUT:-60}
         --access-logfile -
         --error-logfile -
@@ -71,7 +71,32 @@ services:
       db:
         condition: service_healthy
 
-  worker:
+  worker-critical:
+    image: promocode-service-backend
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    env_file:
+      - path: ${ENV_FILE:-.env.production}
+        format: raw
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=INFO
+      - --queues=critical,notifications
+      - --concurrency=1
+      - --prefetch-multiplier=1
+      - --hostname=critical@%h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-bulk:
     image: promocode-service-backend
     build:
       context: .
@@ -82,7 +107,17 @@ services:
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
-    command: celery -A config worker --loglevel=INFO
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=INFO
+      - --queues=bulk
+      - --concurrency=1
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=10
+      - --hostname=bulk@%h
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -95,8 +130,6 @@ services:
       context: .
       target: backend
     restart: unless-stopped
-    volumes:
-      - media_data:/srv/app/app/media
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw

@@ -80,6 +80,22 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         self.assertEqual(entry['options']['expires'], 3600)
 
 
+class LoggingSettingsTests(SimpleTestCase):
+    def test_logging_writes_application_logs_to_console(self):
+        self.assertEqual(
+            settings.LOGGING['handlers']['console']['class'],
+            'logging.StreamHandler',
+        )
+        self.assertEqual(
+            settings.LOGGING['loggers']['promo']['handlers'],
+            ['console'],
+        )
+        self.assertEqual(
+            settings.LOGGING['loggers']['draws']['level'],
+            settings.APP_LOG_LEVEL,
+        )
+
+
 class AuditLogCleanupTests(TestCase):
     @override_settings(AUDIT_LOG_RETENTION_DAYS=180)
     def test_cleanup_deletes_expired_audit_logs_and_keeps_recent_logs(self):

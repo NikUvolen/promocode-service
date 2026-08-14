@@ -1,21 +1,44 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from io import BytesIO
 from threading import Barrier
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections, IntegrityError
 from django.test import Client, override_settings, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
+from openpyxl import Workbook, load_workbook
 
 from accounts.models import Profile, User
 from accounts.services.authentication import create_token_pair
 from draws.models import Draw, Winner
-from promo.models import PromoCode, PromoCodeAttempt, PromoCodeGeneration
+from promo.models import (
+    PromoCode,
+    PromoCodeAttempt,
+    PromoCodeGeneration,
+    PromoCodeImport,
+)
 from promo.services.notifications import send_registration_email
-from promo.tasks import generate_promo_codes_task
+from promo.tasks import (
+    cleanup_expired_import_files_task,
+    generate_promo_codes_task,
+    import_promo_codes_task,
+)
+
+
+def _xlsx_bytes(rows):
+    workbook = Workbook()
+    worksheet = workbook.active
+    for row in rows:
+        worksheet.append(row)
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
 
 
 class PromoAdminTests(TestCase):
@@ -64,13 +87,33 @@ class PromoAdminTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse('admin:promo_promocode_changelist'),
+            reverse('admin:promo_promocodegeneration_changelist'),
         )
         generation = PromoCodeGeneration.objects.get()
         self.assertEqual(generation.requested_count, 250_000)
         self.assertEqual(generation.created_by, self.admin_user)
         self.assertEqual(generation.celery_task_id, 'celery-task-id')
         delay.assert_called_once_with(generation.pk)
+
+    @patch('promo.admin.generate_promo_codes_task.delay')
+    def test_generation_dialog_redirects_to_generation_list(self, delay):
+        delay.return_value = SimpleNamespace(id='celery-task-id')
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_generate_codes'),
+            {
+                '_form_submitted': True,
+                'count': 250_000,
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response.headers['HX-Redirect'],
+            reverse('admin:promo_promocodegeneration_changelist'),
+        )
+        self.assertEqual(PromoCodeGeneration.objects.count(), 1)
 
     @patch('promo.admin.generate_promo_codes_task.delay')
     def test_rejects_second_active_generation(self, delay):
@@ -91,6 +134,152 @@ class PromoAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(PromoCodeGeneration.objects.count(), 1)
         delay.assert_not_called()
+
+    @patch('promo.admin.import_promo_codes_task.delay')
+    def test_queues_xlsx_import_from_admin(self, delay):
+        delay.return_value = SimpleNamespace(id='import-task-id')
+        upload = SimpleUploadedFile(
+            'codes.xlsx',
+            _xlsx_bytes([('AB12CD34', 'ignored')]),
+            content_type=(
+                'application/vnd.openxmlformats-officedocument.'
+                'spreadsheetml.sheet'
+            ),
+        )
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_import_codes'),
+            {'_form_submitted': True, 'file': upload},
+        )
+
+        import_job = PromoCodeImport.objects.get()
+        self.assertRedirects(
+            response,
+            reverse('admin:promo_promocodeimport_changelist'),
+        )
+        self.assertEqual(import_job.original_filename, 'codes.xlsx')
+        self.assertEqual(import_job.celery_task_id, 'import-task-id')
+        delay.assert_called_once_with(import_job.pk)
+
+    @patch('promo.admin.import_promo_codes_task.delay')
+    def test_import_dialog_redirects_to_import_list(self, delay):
+        delay.return_value = SimpleNamespace(id='import-task-id')
+        upload = SimpleUploadedFile(
+            'codes.xlsx',
+            _xlsx_bytes([('AB12CD34',)]),
+            content_type=(
+                'application/vnd.openxmlformats-officedocument.'
+                'spreadsheetml.sheet'
+            ),
+        )
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_import_codes'),
+            {'_form_submitted': True, 'file': upload},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response.headers['HX-Redirect'],
+            reverse('admin:promo_promocodeimport_changelist'),
+        )
+        self.assertEqual(PromoCodeImport.objects.count(), 1)
+
+    @override_settings(XLSX_MAX_UPLOAD_SIZE=5)
+    @patch('promo.admin.import_promo_codes_task.delay')
+    def test_rejects_xlsx_over_size_limit(self, delay):
+        upload = SimpleUploadedFile('codes.xlsx', b'123456')
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_import_codes'),
+            {'_form_submitted': True, 'file': upload},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Размер файла не должен превышать 20 МБ.',
+        )
+        self.assertFalse(PromoCodeImport.objects.exists())
+        delay.assert_not_called()
+
+
+class PromoCodeImportTests(TestCase):
+    def setUp(self):
+        self.media_directory = TemporaryDirectory()
+        settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name,
+        )
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        self.addCleanup(self.media_directory.cleanup)
+        self.admin_user = User.objects.create_superuser(
+            email='importer@example.com',
+            password='test-password',
+        )
+
+    def create_import(self, rows):
+        upload = SimpleUploadedFile('codes.xlsx', _xlsx_bytes(rows))
+        return PromoCodeImport.objects.create(
+            source_file=upload,
+            original_filename='codes.xlsx',
+            created_by=self.admin_user,
+        )
+
+    def test_imports_first_column_and_writes_skipped_rows(self):
+        PromoCode.objects.create(code='EXIST001')
+        import_job = self.create_import(
+            (
+                ('NEWCODE1', 'ignored'),
+                ('newcode2', 'ignored'),
+                ('NEWCODE1', 'ignored'),
+                ('invalid', 'ignored'),
+                ('EXIST001', 'ignored'),
+                (None, 'ignored'),
+            )
+        )
+
+        result = import_promo_codes_task(import_job.pk)
+
+        import_job.refresh_from_db()
+        self.assertEqual(import_job.status, PromoCodeImport.Status.COMPLETED)
+        self.assertEqual(import_job.processed_count, 5)
+        self.assertEqual(import_job.imported_count, 2)
+        self.assertEqual(import_job.skipped_count, 3)
+        self.assertEqual(result['imported_count'], 2)
+        self.assertTrue(PromoCode.objects.filter(code='NEWCODE1').exists())
+        self.assertTrue(PromoCode.objects.filter(code='NEWCODE2').exists())
+        self.assertTrue(import_job.error_file)
+
+        with import_job.error_file.open('rb') as error_file:
+            workbook = load_workbook(error_file, read_only=True)
+            rows = list(workbook.active.iter_rows(values_only=True))
+            workbook.close()
+        reasons = {row[2] for row in rows[1:]}
+        self.assertEqual(
+            reasons,
+            {
+                'Дубликат в файле',
+                'Неверный формат',
+                'Код уже существует в базе',
+            },
+        )
+
+    @override_settings(GENERATED_FILE_RETENTION_DAYS=7)
+    def test_cleanup_deletes_files_but_keeps_import_history(self):
+        import_job = self.create_import((('NEWCODE1',),))
+        import_promo_codes_task(import_job.pk)
+        PromoCodeImport.objects.filter(pk=import_job.pk).update(
+            created_at=timezone.now() - timedelta(days=8),
+        )
+
+        deleted_count = cleanup_expired_import_files_task()
+
+        import_job.refresh_from_db()
+        self.assertEqual(deleted_count, 1)
+        self.assertFalse(import_job.source_file)
+        self.assertTrue(PromoCodeImport.objects.filter(pk=import_job.pk).exists())
 
 
 class PromoCodeGenerationTests(TestCase):

@@ -1,4 +1,5 @@
-from django.test import TestCase
+from django.conf import settings
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 
@@ -34,3 +35,29 @@ class ApiDocumentationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="swagger-ui"')
+
+
+class CeleryQueueRoutingTests(SimpleTestCase):
+    def test_routes_tasks_by_workload(self):
+        expected_routes = {
+            'draws.tasks.run_daily_draw_task': 'critical',
+            'draws.tasks.run_manual_draw_task': 'critical',
+            'accounts.tasks.send_verification_email_task': 'notifications',
+            'accounts.tasks.send_password_reset_email_task': 'notifications',
+            'promo.tasks.send_registration_email_task': 'notifications',
+            'draws.tasks.send_winner_email_task': 'notifications',
+            'promo.tasks.generate_promo_codes_task': 'bulk',
+            'promo.tasks.import_promo_codes_task': 'bulk',
+            'draws.tasks.generate_draw_report_task': 'bulk',
+            'promo.tasks.cleanup_expired_import_files_task': 'bulk',
+            'draws.tasks.cleanup_expired_report_files_task': 'bulk',
+        }
+
+        self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'bulk')
+        self.assertEqual(
+            {
+                task_name: route['queue']
+                for task_name, route in settings.CELERY_TASK_ROUTES.items()
+            },
+            expected_routes,
+        )

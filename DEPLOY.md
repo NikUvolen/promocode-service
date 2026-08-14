@@ -15,7 +15,7 @@ containers.
 5. Start the stack with a fixed Compose project name:
 
 ```bash
-docker compose -p gear-drop --env-file .env.production up -d --build
+docker compose -p gear-drop --env-file .env.production up -d --build --remove-orphans
 docker compose -p gear-drop --env-file .env.production exec backend python manage.py createsuperuser
 ```
 
@@ -30,7 +30,7 @@ Useful commands:
 
 ```bash
 docker compose -p gear-drop --env-file .env.production ps
-docker compose -p gear-drop --env-file .env.production logs -f backend worker beat
+docker compose -p gear-drop --env-file .env.production logs -f backend worker-critical worker-bulk beat
 docker compose -p gear-drop --env-file .env.production exec backend python manage.py migrate
 docker compose -p gear-drop --env-file .env.production down
 ```

@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">close</span>
     </div>
 
-    <form method="post" novalidate hx-post="{{ request.path }}" hx-target="#dialog-form" hx-select="#dialog-form" hx-swap="outerHTML" hx-indicator="#dialog-preloader">
+    <form method="post" enctype="multipart/form-data" novalidate hx-post="{{ request.path }}" hx-encoding="multipart/form-data" hx-target="#dialog-form" hx-select="#dialog-form" hx-swap="outerHTML" hx-indicator="#dialog-preloader">
         {% csrf_token %}
 
         {% if dialog.title or dialog.description %}
@@ -27,6 +27,14 @@
         <div id="dialog-form" class="mb-6 {% if form.fields|length > 1 %}mt-6{% endif %}">
             {{ form.render_before_template }}
 
+            {% if form.non_field_errors %}
+                <div class="bg-red-50 border border-red-200 mb-4 px-3 py-2 rounded-default text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
+                    {% for error in form.non_field_errors %}
+                        <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
             <div class="flex flex-col gap-3 *:mb-0">
                 {% for field in form %}
                     {% include "unfold/helpers/field.html" %}
@@ -38,7 +46,7 @@
 
         <div class="border-t border-base-200 flex flex-row justify-between -mx-6 px-6 -mb-3 pt-3 dark:border-base-700">
             {% component "unfold/components/button.html" with variant="default" href="#" extra_attrs="x-on:click='openModal = false'" %}
-                {% trans "Cancel" %}
+                Отмена
             {% endcomponent %}
 
             {% component "unfold/components/button.html" with submit=1 %}

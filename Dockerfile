@@ -32,7 +32,9 @@ WORKDIR /srv/app/app
 
 RUN python manage.py collectstatic --noinput
 
-RUN useradd --create-home --uid 10001 appuser
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /srv/app/app/media \
+    && chown appuser:appuser /srv/app/app/media
 USER appuser
 
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]

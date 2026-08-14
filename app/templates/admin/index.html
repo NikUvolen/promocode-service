@@ -23,7 +23,7 @@
                 </p>
             </div>
 
-            <div class="flex flex-col gap-2 sm:flex-row">
+            <div class="flex flex-col gap-2 self-end sm:flex-row sm:ml-auto">
                 {% component "unfold/components/button.html" with href=run_draw_url icon="casino" variant="default" extra_attrs='hx-get="'|add:run_draw_url|add:'" hx-target="#modal-content" hx-select="#dialog" x-on:htmx:after-on-load="openModal = true"' %}
                     Провести розыгрыш
                 {% endcomponent %}

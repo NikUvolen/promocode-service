@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.conf import settings
+from django.contrib import admin
 from django.core import mail
 from django.test import override_settings
 from django.test import TestCase
@@ -38,6 +39,57 @@ class AccountsAdminTests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
+
+    def test_user_admin_participation_statistics(self):
+        from promo.models import PromoCode, PromoCodeAttempt
+
+        user = User.objects.create_user(
+            email='participant@example.com',
+            password='test-password',
+        )
+        Profile.objects.create(user=user)
+        PromoCode.objects.create(
+            code='CODE0001',
+            registered_by=user,
+            registered_at=timezone.now(),
+        )
+        PromoCode.objects.create(
+            code='CODE0002',
+            registered_by=user,
+            registered_at=timezone.now(),
+        )
+        for index, result in enumerate(
+            (
+                PromoCodeAttempt.Result.SUCCESS,
+                PromoCodeAttempt.Result.FAILURE,
+                PromoCodeAttempt.Result.BLOCKED,
+            )
+        ):
+            reasons = {
+                PromoCodeAttempt.Result.SUCCESS: PromoCodeAttempt.Reason.SUCCESS,
+                PromoCodeAttempt.Result.FAILURE: (
+                    PromoCodeAttempt.Reason.NOT_FOUND
+                ),
+                PromoCodeAttempt.Result.BLOCKED: (
+                    PromoCodeAttempt.Reason.RATE_LIMIT
+                ),
+            }
+            PromoCodeAttempt.objects.create(
+                user=user,
+                raw_code=f'CODE000{index}',
+                normalized_code=f'CODE000{index}',
+                result=result,
+                reason=reasons[result],
+            )
+
+        model_admin = admin.site._registry[User]
+
+        self.assertEqual(model_admin.registered_promo_codes_count(user), 2)
+        self.assertEqual(model_admin.total_attempts_count(user), 3)
+        self.assertEqual(model_admin.successful_attempts_count(user), 1)
+        self.assertEqual(model_admin.failed_attempts_count(user), 1)
+        self.assertEqual(model_admin.blocked_attempts_count(user), 1)
+        self.assertEqual(model_admin.successful_attempts_rate(user), '33.3%')
 
 
 class RegistrationApiTests(TestCase):

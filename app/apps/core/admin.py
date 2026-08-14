@@ -1,8 +1,16 @@
 from django.contrib import admin
 
 from unfold.admin import ModelAdmin
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 
 from .models import AuditLog
+
+
+admin.site.unregister(BlacklistedToken)
+admin.site.unregister(OutstandingToken)
 
 
 @admin.register(AuditLog)

@@ -4,6 +4,7 @@ from pathlib import Path
 from os import getenv
 
 from celery.schedules import crontab
+from django.urls import reverse_lazy
 from dotenv import load_dotenv
 
 
@@ -465,4 +466,107 @@ UNFOLD = {
     ],
     'SHOW_HISTORY': True,
     'SHOW_VIEW_ON_SITE': False,
+    'SIDEBAR': {
+        'navigation': [
+            {
+                'title': 'Промокоды',
+                'items': [
+                    {
+                        'title': 'Промокоды',
+                        'icon': 'confirmation_number',
+                        'link': reverse_lazy(
+                            'admin:promo_promocode_changelist',
+                        ),
+                    }
+                ]
+            },
+            {
+                'title': 'Розыгрыши',
+                'items': [
+                    {
+                        'title': 'Розыгрыши',
+                        'icon': 'casino',
+                        'link': reverse_lazy(
+                            'admin:draws_draw_changelist',
+                        ),
+                    },
+                    {
+                        'title': 'Победители',
+                        'icon': 'emoji_events',
+                        'link': reverse_lazy(
+                            'admin:draws_winner_changelist',
+                        ),
+                    },
+                    {
+                        'title': 'Отчеты',
+                        'icon': 'bar_chart',
+                        'link': reverse_lazy(
+                            'admin:draws_drawreport_changelist',
+                        ),
+                    }
+                ]
+            },
+            {
+                'title': 'Системное',
+                'collapsible': True,
+                'items': [
+                    {
+                        'title': 'Генерации промокодов',
+                        'icon': 'event_note',
+                        'link': reverse_lazy(
+                            'admin:promo_promocodegeneration_changelist',
+                        ),
+                    },
+                    {
+                        'title': 'Импорт промокодов',
+                        'icon': 'file_upload',
+                        'link': reverse_lazy(
+                            'admin:promo_promocodeimport_changelist',
+                        ),
+                    },
+                    {
+                        'title': 'Попытки ввода промокодов',
+                        'icon': 'error',
+                        'link': reverse_lazy(
+                            'admin:promo_promocodeattempt_changelist',
+                        ),
+                    },
+                    {
+                        'title': 'Журнал аудита',
+                        'icon': 'list',
+                        'link': reverse_lazy(
+                            'admin:core_auditlog_changelist'
+                        ),
+                    }
+                ]
+            },
+            {
+                'title': 'Администрирование',
+                'collapsible': True,
+                'items': [
+                    {
+                        'title': 'Пользователи',
+                        'icon': 'person',
+                        'link': reverse_lazy(
+                            'admin:accounts_user_changelist'
+                        ),
+                    },
+                    {
+                        'title': 'Профили',
+                        'icon': 'account_box',
+                        'link': reverse_lazy(
+                            'admin:accounts_profile_changelist'
+                        ),
+                    },
+                    {
+                        'title': 'Группы',
+                        'icon': 'group',
+                        'link': reverse_lazy(
+                            'admin:auth_group_changelist'
+                        ),
+                    }
+                ]
+            }
+        ],
+    },
 }

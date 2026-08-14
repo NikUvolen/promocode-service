@@ -70,6 +70,7 @@ class AuditLog(models.Model):
         )
 
     event_type = models.CharField(
+        'событие',
         max_length=64,
         choices=EventType.choices,
     )
@@ -79,18 +80,19 @@ class AuditLog(models.Model):
         null=True,
         blank=True,
         related_name='audit_logs',
+        verbose_name='инициатор',
     )
-    target_model = models.CharField(max_length=128, blank=True)
-    target_object_id = models.CharField(max_length=64, blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    target_model = models.CharField('модель объекта', max_length=128, blank=True)
+    target_object_id = models.CharField('ID объекта', max_length=64, blank=True)
+    metadata = models.JSONField('дополнительные данные', default=dict, blank=True)
+    created_at = models.DateTimeField('дата события', auto_now_add=True)
 
     def __str__(self):
         return f'{self.created_at:%Y-%m-%d %H:%M:%S} | {self.event_type}'
 
     class Meta:
-        verbose_name = 'audit log'
-        verbose_name_plural = 'audit logs'
+        verbose_name = 'событие аудита'
+        verbose_name_plural = 'журнал аудита'
         ordering = ('-created_at',)
         indexes = [
             models.Index(fields=('event_type', 'created_at')),

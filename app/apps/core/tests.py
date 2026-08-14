@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
+from config.celery import app as celery_app
 from core.models import AuditLog
 from core.tasks import cleanup_expired_audit_logs_task
 
@@ -64,9 +65,23 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         }
 
         self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'bulk')
+        self.assertEqual(settings.CELERY_TASK_DEFAULT_EXCHANGE, 'bulk')
+        self.assertEqual(settings.CELERY_TASK_DEFAULT_ROUTING_KEY, 'bulk')
+        self.assertFalse(settings.CELERY_TASK_CREATE_MISSING_QUEUES)
         self.assertEqual(
             {queue.name for queue in settings.CELERY_TASK_QUEUES},
             {'critical', 'notifications', 'bulk'},
+        )
+        self.assertEqual(
+            {
+                queue.name: (queue.exchange.name, queue.routing_key)
+                for queue in settings.CELERY_TASK_QUEUES
+            },
+            {
+                'critical': ('critical', 'critical'),
+                'notifications': ('notifications', 'notifications'),
+                'bulk': ('bulk', 'bulk'),
+            },
         )
         self.assertEqual(
             {
@@ -75,6 +90,55 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             },
             expected_routes,
         )
+        celery_app.autodiscover_tasks(force=True)
+        registered_project_tasks = {
+            task_name
+            for task_name in celery_app.tasks
+            if task_name.startswith(('accounts.', 'core.', 'draws.', 'promo.'))
+        }
+        self.assertEqual(registered_project_tasks, set(expected_routes))
+        for task_name, expected_queue in expected_routes.items():
+            with self.subTest(task=task_name):
+                route = celery_app.amqp.router.route({}, task_name)
+                self.assertEqual(route['queue'].name, expected_queue)
+
+    def test_redis_visibility_timeout_covers_long_running_jobs(self):
+        visibility_timeout = settings.CELERY_BROKER_TRANSPORT_OPTIONS[
+            'visibility_timeout'
+        ]
+
+        self.assertGreater(
+            visibility_timeout,
+            settings.BACKGROUND_JOB_RUNNING_TIMEOUT,
+        )
+
+    def test_non_repeatable_tasks_are_acknowledged_after_execution(self):
+        celery_app.autodiscover_tasks(force=True)
+        reliable_tasks = (
+            'accounts.tasks.send_verification_email_task',
+            'accounts.tasks.send_password_reset_email_task',
+            'promo.tasks.send_registration_email_task',
+            'draws.tasks.send_winner_email_task',
+            'draws.tasks.run_daily_draw_task',
+            'draws.tasks.run_manual_draw_task',
+            'promo.tasks.generate_promo_codes_task',
+            'promo.tasks.import_promo_codes_task',
+            'draws.tasks.generate_draw_report_task',
+        )
+
+        for task_name in reliable_tasks:
+            with self.subTest(task=task_name):
+                task = celery_app.tasks[task_name]
+                self.assertTrue(task.acks_late)
+                self.assertTrue(task.reject_on_worker_lost)
+
+    def test_every_beat_task_has_an_explicit_route_and_expiration(self):
+        routes = settings.CELERY_TASK_ROUTES
+
+        for schedule_name, entry in settings.CELERY_BEAT_SCHEDULE.items():
+            with self.subTest(schedule=schedule_name):
+                self.assertIn(entry['task'], routes)
+                self.assertGreater(entry['options']['expires'], 0)
 
     def test_beat_registers_audit_cleanup_task(self):
         entry = settings.CELERY_BEAT_SCHEDULE['cleanup-expired-audit-logs']

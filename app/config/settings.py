@@ -321,6 +321,10 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     'socket_connect_timeout': 2,
     'socket_timeout': 5,
+    # Bulk XLSX jobs may legitimately run longer than Redis' one-hour default.
+    'visibility_timeout': int(
+        getenv('CELERY_VISIBILITY_TIMEOUT', str(12 * 60 * 60))
+    ),
 }
 CELERY_TASK_PUBLISH_RETRY = True
 CELERY_TASK_PUBLISH_RETRY_POLICY = {
@@ -336,10 +340,19 @@ CELERY_TASK_ALWAYS_EAGER = IS_TESTING or env_bool(
 )
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TASK_DEFAULT_QUEUE = 'bulk'
+CELERY_TASK_DEFAULT_EXCHANGE = 'bulk'
+CELERY_TASK_DEFAULT_EXCHANGE_TYPE = 'direct'
+CELERY_TASK_DEFAULT_ROUTING_KEY = 'bulk'
+CELERY_TASK_CREATE_MISSING_QUEUES = False
+CELERY_WORKER_CANCEL_LONG_RUNNING_TASKS_ON_CONNECTION_LOSS = True
 CELERY_TASK_QUEUES = (
-    Queue('critical'),
-    Queue('notifications'),
-    Queue('bulk'),
+    Queue('critical', exchange='critical', routing_key='critical'),
+    Queue(
+        'notifications',
+        exchange='notifications',
+        routing_key='notifications',
+    ),
+    Queue('bulk', exchange='bulk', routing_key='bulk'),
 )
 CELERY_TASK_ROUTES = {
     'draws.tasks.run_daily_draw_task': {'queue': 'critical'},

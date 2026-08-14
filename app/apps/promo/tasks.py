@@ -21,6 +21,8 @@ from promo.services.xlsx_import import import_promo_codes
     retry_backoff=True,
     retry_jitter=True,
     max_retries=5,
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def send_registration_email_task(promo_code_id):
     send_registration_email(promo_code_id)

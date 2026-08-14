@@ -101,6 +101,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+TEST_RUNNER = 'config.test_runner.ProjectTestRunner'
 
 
 # Database

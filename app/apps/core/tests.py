@@ -1,6 +1,13 @@
+from datetime import timedelta
+
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase
+from django.test import override_settings, SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils import timezone
+
+from accounts.models import User
+from core.models import AuditLog
+from core.tasks import cleanup_expired_audit_logs_task
 
 
 class ApiDocumentationTests(TestCase):
@@ -51,6 +58,7 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             'draws.tasks.generate_draw_report_task': 'bulk',
             'promo.tasks.cleanup_expired_import_files_task': 'bulk',
             'draws.tasks.cleanup_expired_report_files_task': 'bulk',
+            'core.tasks.cleanup_expired_audit_logs_task': 'bulk',
         }
 
         self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'bulk')
@@ -61,3 +69,60 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             },
             expected_routes,
         )
+
+    def test_beat_registers_audit_cleanup_task(self):
+        entry = settings.CELERY_BEAT_SCHEDULE['cleanup-expired-audit-logs']
+
+        self.assertEqual(
+            entry['task'],
+            'core.tasks.cleanup_expired_audit_logs_task',
+        )
+        self.assertEqual(entry['options']['expires'], 3600)
+
+
+class LoggingSettingsTests(SimpleTestCase):
+    def test_logging_writes_application_logs_to_console(self):
+        self.assertEqual(
+            settings.LOGGING['handlers']['console']['class'],
+            'logging.StreamHandler',
+        )
+        self.assertEqual(
+            settings.LOGGING['loggers']['promo']['handlers'],
+            ['console'],
+        )
+        self.assertEqual(
+            settings.LOGGING['loggers']['draws']['level'],
+            settings.APP_LOG_LEVEL,
+        )
+
+
+class AuditLogCleanupTests(TestCase):
+    @override_settings(AUDIT_LOG_RETENTION_DAYS=180)
+    def test_cleanup_deletes_expired_audit_logs_and_keeps_recent_logs(self):
+        user = User.objects.create_user(
+            email='auditor@example.com',
+            password='test-password',
+        )
+        old_log = AuditLog.objects.create(
+            event_type=AuditLog.EventType.PROMO_IMPORT_COMPLETED,
+            actor=user,
+            metadata={'imported_count': 10},
+        )
+        recent_log = AuditLog.objects.create(
+            event_type=AuditLog.EventType.DRAW_REPORT_COMPLETED,
+            actor=user,
+            metadata={'filename': 'report.xlsx'},
+        )
+        AuditLog.objects.filter(pk=old_log.pk).update(
+            created_at=timezone.now() - timedelta(days=181),
+        )
+
+        deleted_count = cleanup_expired_audit_logs_task()
+
+        self.assertEqual(deleted_count, 1)
+        self.assertFalse(AuditLog.objects.filter(pk=old_log.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(pk=recent_log.pk).exists())
+        cleanup_log = AuditLog.objects.get(
+            event_type=AuditLog.EventType.AUDIT_CLEANUP_COMPLETED,
+        )
+        self.assertEqual(cleanup_log.metadata['deleted_count'], 1)

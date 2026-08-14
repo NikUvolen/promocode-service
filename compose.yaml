@@ -1,7 +1,14 @@
+x-log-options: &log-options
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *log-options
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -16,6 +23,7 @@ services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
+    logging: *log-options
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -31,6 +39,7 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    logging: *log-options
     volumes:
       - media_data:/srv/app/app/media
     env_file:
@@ -63,6 +72,7 @@ services:
       context: .
       target: backend
     restart: "no"
+    logging: *log-options
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -77,6 +87,7 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    logging: *log-options
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -102,6 +113,7 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    logging: *log-options
     volumes:
       - media_data:/srv/app/app/media
     env_file:
@@ -130,6 +142,7 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    logging: *log-options
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -146,6 +159,7 @@ services:
       context: .
       target: web
     restart: unless-stopped
+    logging: *log-options
     ports:
       - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:80"
     depends_on:

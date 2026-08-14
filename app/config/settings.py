@@ -17,6 +17,7 @@ def env_bool(name, default=False):
 def env_list(name, default=''):
     return [value.strip() for value in getenv(name, default).split(',') if value.strip()]
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR / 'apps'))
@@ -33,6 +34,12 @@ SECRET_KEY = getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool('DJANGO_DEBUG', True)
 IS_TESTING = 'test' in sys.argv
+DJANGO_LOG_LEVEL = getenv('DJANGO_LOG_LEVEL', 'INFO')
+APP_LOG_LEVEL = getenv('APP_LOG_LEVEL', 'INFO')
+DJANGO_REQUEST_LOG_LEVEL = getenv(
+    'DJANGO_REQUEST_LOG_LEVEL',
+    'CRITICAL' if IS_TESTING else 'WARNING',
+)
 
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS')
 CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
@@ -187,6 +194,69 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', False)
 
 
+# Logging
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'console': {
+            'format': (
+                '%(asctime)s %(levelname)s %(name)s '
+                '%(process)d %(message)s'
+            ),
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'console',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': APP_LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': DJANGO_LOG_LEVEL,
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': DJANGO_REQUEST_LOG_LEVEL,
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+        'accounts': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+        'core': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+        'draws': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+        'promo': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}
+
+
 # Email
 
 EMAIL_BACKEND = getenv(
@@ -240,6 +310,7 @@ CELERY_TASK_ROUTES = {
     'draws.tasks.generate_draw_report_task': {'queue': 'bulk'},
     'promo.tasks.cleanup_expired_import_files_task': {'queue': 'bulk'},
     'draws.tasks.cleanup_expired_report_files_task': {'queue': 'bulk'},
+    'core.tasks.cleanup_expired_audit_logs_task': {'queue': 'bulk'},
 }
 CELERY_BEAT_SCHEDULE = {
     'run-daily-draw-at-moscow-midnight': {
@@ -257,12 +328,18 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=3, minute=35),
         'options': {'expires': 60 * 60},
     },
+    'cleanup-expired-audit-logs': {
+        'task': 'core.tasks.cleanup_expired_audit_logs_task',
+        'schedule': crontab(hour=3, minute=45),
+        'options': {'expires': 60 * 60},
+    },
 }
 
 XLSX_MAX_UPLOAD_SIZE = int(getenv('XLSX_MAX_UPLOAD_SIZE', str(20 * 1024 * 1024)))
 GENERATED_FILE_RETENTION_DAYS = int(
     getenv('GENERATED_FILE_RETENTION_DAYS', '7')
 )
+AUDIT_LOG_RETENTION_DAYS = int(getenv('AUDIT_LOG_RETENTION_DAYS', '180'))
 
 AUTH_USER_MODEL = 'accounts.User'
 

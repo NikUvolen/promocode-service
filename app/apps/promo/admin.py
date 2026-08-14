@@ -11,6 +11,9 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 from unfold.admin import ModelAdmin
 
+from core.audit import log_audit_event
+from core.models import AuditLog
+
 from .forms import PromoCodeGenerationForm, PromoCodeImportForm
 from .models import (
     PromoCode,
@@ -96,6 +99,15 @@ class PromoCodeAdmin(ModelAdmin):
             generation.error = str(error)[:2000]
             generation.finished_at = timezone.now()
             generation.save(update_fields=('status', 'error', 'finished_at'))
+            log_audit_event(
+                AuditLog.EventType.PROMO_GENERATION_FAILED,
+                actor=request.user,
+                target=generation,
+                metadata={
+                    'requested_count': generation.requested_count,
+                    'error': str(error)[:500],
+                },
+            )
             messages.error(
                 request,
                 'Не удалось отправить задачу в Celery. Проверьте Redis и worker.',
@@ -103,6 +115,15 @@ class PromoCodeAdmin(ModelAdmin):
         else:
             generation.celery_task_id = task.id
             generation.save(update_fields=('celery_task_id',))
+            log_audit_event(
+                AuditLog.EventType.PROMO_GENERATION_QUEUED,
+                actor=request.user,
+                target=generation,
+                metadata={
+                    'requested_count': generation.requested_count,
+                    'celery_task_id': task.id,
+                },
+            )
             messages.success(
                 request,
                 f'Генерация {generation.requested_count:,} кодов поставлена в очередь. '
@@ -141,6 +162,15 @@ class PromoCodeAdmin(ModelAdmin):
             import_job.error = str(error)[:2000]
             import_job.finished_at = timezone.now()
             import_job.save(update_fields=('status', 'error', 'finished_at'))
+            log_audit_event(
+                AuditLog.EventType.PROMO_IMPORT_FAILED,
+                actor=request.user,
+                target=import_job,
+                metadata={
+                    'original_filename': import_job.original_filename,
+                    'error': str(error)[:500],
+                },
+            )
             messages.error(
                 request,
                 'Не удалось отправить импорт в Celery. Проверьте Redis и worker.',
@@ -148,6 +178,15 @@ class PromoCodeAdmin(ModelAdmin):
         else:
             import_job.celery_task_id = task.id
             import_job.save(update_fields=('celery_task_id',))
+            log_audit_event(
+                AuditLog.EventType.PROMO_IMPORT_QUEUED,
+                actor=request.user,
+                target=import_job,
+                metadata={
+                    'original_filename': import_job.original_filename,
+                    'celery_task_id': task.id,
+                },
+            )
             messages.success(
                 request,
                 'Импорт поставлен в очередь. Результат появится в журнале '

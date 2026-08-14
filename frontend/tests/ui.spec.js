@@ -10,6 +10,12 @@ const emptyProfile = {
   is_complete: false,
 }
 
+async function mockAuthenticatedSession(page) {
+  await page.route('**/api/v1/auth/session/', async (route) => {
+    await route.fulfill({ json: { authenticated: true } })
+  })
+}
+
 async function mockProfileApi(page, currentProfile = emptyProfile) {
   let promoCodeEmailNotifications = true
   await page.route('**/api/v1/auth/profile/', async (route) => {
@@ -161,12 +167,7 @@ test('page shells use the same container boundary', async ({ page }) => {
 })
 
 test('account header and content share a container', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'gear-drop.tokens',
-      JSON.stringify({ access: 'preview', refresh: 'preview' }),
-    )
-  })
+  await mockAuthenticatedSession(page)
   await mockProfileApi(page)
   await mockPromoApi(page)
   await page.goto('/account')
@@ -177,12 +178,7 @@ test('account header and content share a container', async ({ page }) => {
 })
 
 test('profile can be viewed and updated', async ({ page }, testInfo) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'gear-drop.tokens',
-      JSON.stringify({ access: 'preview', refresh: 'preview' }),
-    )
-  })
+  await mockAuthenticatedSession(page)
   await mockProfileApi(page)
   await mockPromoApi(page)
   await page.goto('/account')
@@ -210,12 +206,7 @@ test('profile can be viewed and updated', async ({ page }, testInfo) => {
 })
 
 test('promo code can be registered', async ({ page }, testInfo) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'gear-drop.tokens',
-      JSON.stringify({ access: 'preview', refresh: 'preview' }),
-    )
-  })
+  await mockAuthenticatedSession(page)
   await mockProfileApi(page, {
     ...emptyProfile,
     first_name: 'Михаил',
@@ -239,12 +230,7 @@ test('promo code can be registered', async ({ page }, testInfo) => {
 })
 
 test('promo code statuses and pagination are displayed', async ({ page }, testInfo) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'gear-drop.tokens',
-      JSON.stringify({ access: 'preview', refresh: 'preview' }),
-    )
-  })
+  await mockAuthenticatedSession(page)
   await mockProfileApi(page, { ...emptyProfile, is_complete: true })
   const codes = Array.from({ length: 12 }, (_, index) => ({
     code: `CD${String(index).padStart(6, '0')}`,
@@ -267,12 +253,7 @@ test('promo code statuses and pagination are displayed', async ({ page }, testIn
 })
 
 test('promo rate limit shows countdown', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'gear-drop.tokens',
-      JSON.stringify({ access: 'preview', refresh: 'preview' }),
-    )
-  })
+  await mockAuthenticatedSession(page)
   await mockProfileApi(page, { ...emptyProfile, is_complete: true })
   await mockPromoApi(page, { rateLimited: true })
   await page.goto('/account')

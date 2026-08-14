@@ -68,7 +68,6 @@ def _record_attempt(
     normalized_code,
     result,
     reason,
-    ip_address,
 ):
     return PromoCodeAttempt.objects.create(
         user=user,
@@ -78,7 +77,6 @@ def _record_attempt(
         ),
         result=result,
         reason=reason,
-        ip_address=ip_address,
     )
 
 
@@ -114,7 +112,7 @@ def get_registration_status(*, user):
     }
 
 
-def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
+def _register_locked(*, user, raw_code, normalized_code, now):
     profile = Profile.objects.filter(user=user).first()
     if profile is None or not profile.is_complete:
         _record_attempt(
@@ -123,7 +121,6 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
             normalized_code=normalized_code,
             result=PromoCodeAttempt.Result.BLOCKED,
             reason=PromoCodeAttempt.Reason.PROFILE_INCOMPLETE,
-            ip_address=ip_address,
         )
         return ProfileIncomplete()
 
@@ -143,7 +140,6 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
             normalized_code=normalized_code,
             result=PromoCodeAttempt.Result.BLOCKED,
             reason=PromoCodeAttempt.Reason.RATE_LIMIT,
-            ip_address=ip_address,
         )
         return PromoCodeRateLimited(
             attempt.created_at + BAN_DURATION,
@@ -157,7 +153,6 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
             normalized_code=normalized_code,
             result=PromoCodeAttempt.Result.FAILURE,
             reason=PromoCodeAttempt.Reason.INVALID_FORMAT,
-            ip_address=ip_address,
         )
         return InvalidPromoCodeFormat()
 
@@ -173,7 +168,6 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
             normalized_code=normalized_code,
             result=PromoCodeAttempt.Result.FAILURE,
             reason=PromoCodeAttempt.Reason.NOT_FOUND,
-            ip_address=ip_address,
         )
         return PromoCodeNotFound()
 
@@ -184,7 +178,6 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
             normalized_code=normalized_code,
             result=PromoCodeAttempt.Result.FAILURE,
             reason=PromoCodeAttempt.Reason.ALREADY_REGISTERED,
-            ip_address=ip_address,
         )
         return PromoCodeAlreadyRegistered()
 
@@ -197,7 +190,6 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
         normalized_code=normalized_code,
         result=PromoCodeAttempt.Result.SUCCESS,
         reason=PromoCodeAttempt.Reason.SUCCESS,
-        ip_address=ip_address,
     )
 
     if profile.promo_code_email_notifications:
@@ -209,7 +201,7 @@ def _register_locked(*, user, raw_code, normalized_code, ip_address, now):
     return promo_code
 
 
-def register_promo_code(*, user, raw_code, ip_address=None):
+def register_promo_code(*, user, raw_code):
     normalized_code = normalize_code(raw_code)
 
     with transaction.atomic():
@@ -221,7 +213,6 @@ def register_promo_code(*, user, raw_code, ip_address=None):
             user=locked_user,
             raw_code=raw_code,
             normalized_code=normalized_code,
-            ip_address=ip_address,
             now=now,
         )
 

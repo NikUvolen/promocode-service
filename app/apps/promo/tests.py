@@ -509,7 +509,6 @@ class PromoCodeApiTests(TestCase):
             {'code': code},
             content_type='application/json',
             HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
-            REMOTE_ADDR='127.0.0.2',
         )
 
     def test_requires_authentication(self):
@@ -530,7 +529,6 @@ class PromoCodeApiTests(TestCase):
         self.assertIsNotNone(promo_code.registered_at)
         attempt = PromoCodeAttempt.objects.get()
         self.assertEqual(attempt.result, PromoCodeAttempt.Result.SUCCESS)
-        self.assertEqual(attempt.ip_address, '127.0.0.2')
         schedule_email.assert_called_once_with(promo_code.pk)
 
     def test_requires_completed_profile(self):

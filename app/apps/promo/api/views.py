@@ -85,7 +85,6 @@ class PromoCodeViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             promo_code = register_promo_code(
                 user=request.user,
                 raw_code=serializer.validated_data['code'],
-                ip_address=request.META.get('REMOTE_ADDR'),
             )
         except PromoCodeRateLimited as exc:
             return Response(

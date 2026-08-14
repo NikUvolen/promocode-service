@@ -375,7 +375,7 @@ AUTH_USER_MODEL = 'accounts.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'accounts.api.authentication.CookieJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -398,6 +398,11 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
     'CHECK_REVOKE_TOKEN': True,
 }
+
+JWT_ACCESS_COOKIE_NAME = getenv('JWT_ACCESS_COOKIE_NAME', 'gear_access')
+JWT_REFRESH_COOKIE_NAME = getenv('JWT_REFRESH_COOKIE_NAME', 'gear_refresh')
+JWT_COOKIE_SECURE = env_bool('JWT_COOKIE_SECURE', False)
+JWT_COOKIE_SAMESITE = getenv('JWT_COOKIE_SAMESITE', 'Lax')
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Промоакция API',

@@ -273,6 +273,9 @@ class RegistrationResponseSerializer(DetailResponseSerializer):
     email_queued = serializers.BooleanField()
 
 
-class TokenPairResponseSerializer(serializers.Serializer):
-    access = serializers.CharField()
-    refresh = serializers.CharField()
+class SessionResponseSerializer(serializers.Serializer):
+    authenticated = serializers.BooleanField()
+
+
+class LoginResponseSerializer(DetailResponseSerializer):
+    pass

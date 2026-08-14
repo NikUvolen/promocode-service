@@ -1,5 +1,4 @@
 const API_ROOT = '/api/v1'
-const TOKEN_KEY = 'gear-drop.tokens'
 const SESSION_CLEARED_EVENT = 'gear-drop:session-cleared'
 let refreshPromise = null
 
@@ -22,21 +21,20 @@ function firstMessage(value) {
   return ''
 }
 
-export function getTokens() {
-  try {
-    return JSON.parse(localStorage.getItem(TOKEN_KEY))
-  } catch {
-    return null
-  }
-}
-
-export function saveTokens(tokens) {
-  localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens))
-}
-
-export function clearTokens() {
-  localStorage.removeItem(TOKEN_KEY)
+export function clearSession() {
   window.dispatchEvent(new Event(SESSION_CLEARED_EVENT))
+}
+
+export function clearLegacyTokenStorage() {
+  localStorage.removeItem('gear-drop.tokens')
+}
+
+function getCookie(name) {
+  const prefix = `${encodeURIComponent(name)}=`
+  const cookie = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith(prefix))
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : ''
 }
 
 async function parseResponse(response) {
@@ -58,23 +56,21 @@ async function refreshAccessToken() {
 }
 
 async function performTokenRefresh() {
-  const tokens = getTokens()
-  if (!tokens?.refresh) return null
-
   const response = await fetch(`${API_ROOT}/auth/refresh/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh: tokens.refresh }),
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken'),
+    },
   })
 
   if (!response.ok) {
-    clearTokens()
-    return null
+    clearSession()
+    return false
   }
 
-  const nextTokens = await response.json()
-  saveTokens(nextTokens)
-  return nextTokens.access
+  return true
 }
 
 export function onSessionCleared(listener) {
@@ -89,9 +85,9 @@ async function request(endpoint, options = {}) {
     ...fetchOptions.headers,
   }
 
-  if (auth) {
-    const access = getTokens()?.access
-    if (access) headers.Authorization = `Bearer ${access}`
+  const method = (fetchOptions.method || 'GET').toUpperCase()
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+    headers['X-CSRFToken'] = getCookie('csrftoken')
   }
 
   const [path, query] = endpoint.split('?')
@@ -99,11 +95,12 @@ async function request(endpoint, options = {}) {
   const response = await fetch(url, {
     ...fetchOptions,
     headers,
+    credentials: 'same-origin',
   })
 
   if (response.status === 401 && auth && retry) {
-    const access = await refreshAccessToken()
-    if (access) return request(endpoint, { ...options, retry: false })
+    const refreshed = await refreshAccessToken()
+    if (refreshed) return request(endpoint, { ...options, retry: false })
   }
 
   const payload = await parseResponse(response)

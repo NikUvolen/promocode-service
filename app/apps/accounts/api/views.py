@@ -1,12 +1,17 @@
+from django.conf import settings
+from django.middleware.csrf import get_token
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from accounts.models import Profile
+from accounts.services.authentication import (
+    InvalidRefreshToken,
+    blacklist_refresh_token,
+)
 from accounts.services.registration import resend_verification_email
 from accounts.services.passwords import (
     EmailQueueUnavailable,
@@ -18,7 +23,7 @@ from .serializers import (
     ChangePasswordSerializer,
     DetailResponseSerializer,
     LoginSerializer,
-    LogoutSerializer,
+    LoginResponseSerializer,
     NotificationSettingsSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
@@ -27,9 +32,11 @@ from .serializers import (
     RegistrationResponseSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
-    TokenPairResponseSerializer,
+    SessionResponseSerializer,
     VerifyEmailSerializer,
 )
+from .authentication import CookieJWTAuthentication, enforce_csrf
+from .cookies import clear_auth_cookies, set_auth_cookies
 
 
 class AuthViewSet(viewsets.GenericViewSet):
@@ -172,7 +179,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         detail=False,
         methods=('post',),
         url_path='change-password',
-        authentication_classes=(JWTAuthentication,),
+        authentication_classes=(CookieJWTAuthentication,),
         permission_classes=(IsAuthenticated,),
     )
     def change_password(self, request):
@@ -192,7 +199,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @action(
         detail=False,
         methods=('get', 'patch'),
-        authentication_classes=(JWTAuthentication,),
+        authentication_classes=(CookieJWTAuthentication,),
         permission_classes=(IsAuthenticated,),
     )
     def profile(self, request):
@@ -220,7 +227,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         detail=False,
         methods=('get', 'patch'),
         url_path='notification-settings',
-        authentication_classes=(JWTAuthentication,),
+        authentication_classes=(CookieJWTAuthentication,),
         permission_classes=(IsAuthenticated,),
     )
     def notification_settings(self, request):
@@ -239,7 +246,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @extend_schema(
         tags=('Авторизация',),
         request=LoginSerializer,
-        responses={200: TokenPairResponseSerializer},
+        responses={200: LoginResponseSerializer},
     )
     @action(
         detail=False,
@@ -253,12 +260,27 @@ class AuthViewSet(viewsets.GenericViewSet):
             context={'request': request},
         )
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data)
+        response = Response({'detail': 'Вход выполнен.'})
+        set_auth_cookies(response, serializer.validated_data)
+        return response
 
     @extend_schema(
         tags=('Авторизация',),
-        request=RefreshSerializer,
-        responses={200: TokenPairResponseSerializer},
+        responses={200: SessionResponseSerializer},
+    )
+    @action(
+        detail=False,
+        methods=('get',),
+        authentication_classes=(CookieJWTAuthentication,),
+    )
+    def session(self, request):
+        get_token(request)
+        return Response({'authenticated': request.user.is_authenticated})
+
+    @extend_schema(
+        tags=('Авторизация',),
+        request=None,
+        responses={200: DetailResponseSerializer},
     )
     @action(
         detail=False,
@@ -267,18 +289,28 @@ class AuthViewSet(viewsets.GenericViewSet):
         throttle_scope='auth_refresh',
     )
     def refresh(self, request):
-        serializer = RefreshSerializer(data=request.data)
+        enforce_csrf(request)
+        refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
+        serializer = RefreshSerializer(data={'refresh': refresh_token})
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data)
+        response = Response({'detail': 'Сессия обновлена.'})
+        set_auth_cookies(response, serializer.validated_data)
+        return response
 
     @extend_schema(
         tags=('Авторизация',),
-        request=LogoutSerializer,
+        request=None,
         responses={204: OpenApiResponse(description='Выход выполнен.')},
     )
     @action(detail=False, methods=('post',))
     def logout(self, request):
-        serializer = LogoutSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        enforce_csrf(request)
+        refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
+        if refresh_token:
+            try:
+                blacklist_refresh_token(refresh_token)
+            except InvalidRefreshToken:
+                pass
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        clear_auth_cookies(response)
+        return response

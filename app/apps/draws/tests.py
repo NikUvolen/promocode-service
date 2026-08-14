@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from threading import Barrier
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -11,13 +12,18 @@ from django.test import TestCase, TransactionTestCase
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from accounts.models import Profile, User
-from draws.models import Draw, Winner
+from draws.models import Draw, DrawReport, Winner
 from draws.services.draw import InvalidDrawPeriod, run_draw
 from draws.services.notifications import send_winner_email
-from draws.tasks import run_daily_draw_task
-from promo.models import PromoCode
+from draws.tasks import (
+    cleanup_expired_report_files_task,
+    generate_draw_report_task,
+    run_daily_draw_task,
+)
+from promo.models import PromoCode, PromoCodeAttempt
 
 
 class DrawsAdminTests(TestCase):
@@ -61,6 +67,183 @@ class DrawsAdminTests(TestCase):
             '2026-08-13',
             cutoff.isoformat(),
         )
+
+    @patch('draws.admin.generate_draw_report_task.delay')
+    def test_queues_xlsx_report_from_admin(self, delay):
+        delay.return_value = SimpleNamespace(id='report-task-id')
+
+        response = self.client.post(
+            reverse('admin:draws_draw_generate_report'),
+            {
+                '_form_submitted': True,
+                'date_from': '2026-08-01',
+                'date_to': '2026-08-13',
+            },
+        )
+
+        report = DrawReport.objects.get()
+        self.assertRedirects(
+            response,
+            reverse('admin:draws_drawreport_changelist'),
+        )
+        self.assertEqual(report.date_from.isoformat(), '2026-08-01')
+        self.assertEqual(report.date_to.isoformat(), '2026-08-13')
+        self.assertEqual(report.celery_task_id, 'report-task-id')
+        delay.assert_called_once_with(report.pk)
+
+    @patch('draws.admin.generate_draw_report_task.delay')
+    def test_rejects_report_with_reversed_period(self, delay):
+        response = self.client.post(
+            reverse('admin:draws_draw_generate_report'),
+            {
+                '_form_submitted': True,
+                'date_from': '2026-08-13',
+                'date_to': '2026-08-01',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Дата начала не может быть позже даты окончания.',
+        )
+        self.assertFalse(DrawReport.objects.exists())
+        delay.assert_not_called()
+
+
+class DrawReportTests(TestCase):
+    report_date = datetime(2026, 8, 12).date()
+    moscow = ZoneInfo('Europe/Moscow')
+
+    def setUp(self):
+        self.media_directory = TemporaryDirectory()
+        settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name,
+        )
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        self.addCleanup(self.media_directory.cleanup)
+        self.admin_user = User.objects.create_superuser(
+            email='reporter@example.com',
+            password='test-password',
+        )
+
+    def create_report_data(self):
+        participant = User.objects.create_user(
+            email='winner@example.com',
+            password='StrongPassword_123!',
+        )
+        Profile.objects.create(
+            user=participant,
+            first_name='Иван',
+            last_name='Иванов',
+            middle_name='Иванович',
+            phone='+79990000000',
+        )
+        registration_time = datetime(
+            2026, 8, 12, 12, 0, tzinfo=self.moscow,
+        )
+        User.objects.filter(pk=participant.pk).update(
+            date_joined=registration_time,
+        )
+        promo_code = PromoCode.objects.create(
+            code='REPORT01',
+            registered_by=participant,
+            registered_at=registration_time,
+        )
+        attempt = PromoCodeAttempt.objects.create(
+            user=participant,
+            raw_code=promo_code.code,
+            normalized_code=promo_code.code,
+            result=PromoCodeAttempt.Result.SUCCESS,
+            reason=PromoCodeAttempt.Reason.SUCCESS,
+        )
+        PromoCodeAttempt.objects.filter(pk=attempt.pk).update(
+            created_at=registration_time,
+        )
+        draw = Draw.objects.create(
+            draw_date=self.report_date,
+            status=Draw.Status.COMPLETED,
+            trigger=Draw.Trigger.MANUAL,
+            period_started_at=datetime(
+                2026, 8, 12, 0, 0, tzinfo=self.moscow,
+            ),
+            period_ended_at=datetime(
+                2026, 8, 12, 18, 0, tzinfo=self.moscow,
+            ),
+            started_at=datetime(
+                2026, 8, 12, 18, 0, tzinfo=self.moscow,
+            ),
+            completed_at=datetime(
+                2026, 8, 12, 18, 1, tzinfo=self.moscow,
+            ),
+        )
+        Winner.objects.create(
+            draw=draw,
+            user=participant,
+            promo_code=promo_code,
+            prize=Winner.Prize.AIRPODS,
+        )
+        return participant
+
+    def test_generates_daily_draw_and_winner_sheets(self):
+        participant = self.create_report_data()
+        report = DrawReport.objects.create(
+            date_from=self.report_date,
+            date_to=self.report_date,
+            created_by=self.admin_user,
+        )
+
+        generate_draw_report_task(report.pk)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, DrawReport.Status.COMPLETED)
+        self.assertTrue(report.report_file)
+        with report.report_file.open('rb') as report_file:
+            workbook = load_workbook(report_file, read_only=True, data_only=True)
+            self.assertEqual(
+                workbook.sheetnames,
+                ['По дням', 'Розыгрыши', 'Победители'],
+            )
+            daily_row = list(
+                workbook['По дням'].iter_rows(min_row=2, values_only=True)
+            )[0]
+            winner_row = list(
+                workbook['Победители'].iter_rows(
+                    min_row=2,
+                    values_only=True,
+                )
+            )[0]
+            workbook.close()
+
+        self.assertEqual(daily_row[1:5], (1, 1, 1, 0))
+        self.assertEqual(daily_row[6:8], (1, 1))
+        self.assertEqual(winner_row[2], participant.email)
+        self.assertEqual(
+            winner_row[3:7],
+            ('Иванов', 'Иван', 'Иванович', '+79990000000'),
+        )
+        self.assertEqual(winner_row[8], 'REPORT01')
+
+    @override_settings(GENERATED_FILE_RETENTION_DAYS=7)
+    def test_cleanup_deletes_report_file_but_keeps_history(self):
+        self.create_report_data()
+        report = DrawReport.objects.create(
+            date_from=self.report_date,
+            date_to=self.report_date,
+            created_by=self.admin_user,
+        )
+        generate_draw_report_task(report.pk)
+        DrawReport.objects.filter(pk=report.pk).update(
+            created_at=timezone.now() - timedelta(days=8),
+        )
+
+        deleted_count = cleanup_expired_report_files_task()
+
+        report.refresh_from_db()
+        self.assertEqual(deleted_count, 1)
+        self.assertFalse(report.report_file)
+        self.assertTrue(DrawReport.objects.filter(pk=report.pk).exists())
 
 
 class PublicDrawApiTests(TestCase):

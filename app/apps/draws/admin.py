@@ -2,14 +2,18 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib import admin, messages
-from django.shortcuts import redirect
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
-from .models import Draw, Winner
-from .tasks import run_manual_draw_task
+from .forms import DrawReportForm
+from .models import Draw, DrawReport, Winner
+from .tasks import generate_draw_report_task, run_manual_draw_task
 
 
 class WinnerInline(TabularInline):
@@ -26,7 +30,7 @@ class WinnerInline(TabularInline):
 
 @admin.register(Draw)
 class DrawAdmin(ModelAdmin):
-    actions_list = ('run_manual_draw',)
+    actions_list = ('run_manual_draw', 'generate_report')
     list_display = (
         'draw_date',
         'status',
@@ -89,6 +93,48 @@ class DrawAdmin(ModelAdmin):
             )
         return redirect('admin:draws_draw_changelist')
 
+    @action(
+        description='Выгрузить статистику XLSX',
+        icon='download',
+        permissions=('view',),
+        variant=ActionVariant.PRIMARY,
+        dialog={
+            'title': 'Сформировать отчёт по акции',
+            'description': (
+                'Укажите период или оставьте даты пустыми для отчёта за всё '
+                'время. Файл будет сформирован в фоне через Celery.'
+            ),
+            'form_class': DrawReportForm,
+            'form_submit_text': 'Сформировать',
+        },
+    )
+    def generate_report(self, request, form):
+        report = DrawReport.objects.create(
+            date_from=form.cleaned_data.get('date_from'),
+            date_to=form.cleaned_data.get('date_to'),
+            created_by=request.user,
+        )
+        try:
+            task = generate_draw_report_task.delay(report.pk)
+        except Exception as error:
+            report.status = DrawReport.Status.FAILED
+            report.error = str(error)[:2000]
+            report.finished_at = timezone.now()
+            report.save(update_fields=('status', 'error', 'finished_at'))
+            messages.error(
+                request,
+                'Не удалось отправить отчёт в Celery. Проверьте Redis и worker.',
+            )
+        else:
+            report.celery_task_id = task.id
+            report.save(update_fields=('celery_task_id',))
+            messages.success(
+                request,
+                'Отчёт поставлен в очередь. Ссылка появится в журнале '
+                'отчётов.',
+            )
+        return redirect('admin:draws_drawreport_changelist')
+
     def has_add_permission(self, request):
         return False
 
@@ -126,6 +172,77 @@ class WinnerAdmin(ModelAdmin):
     @admin.display(ordering='draw__draw_date', description='Дата розыгрыша')
     def draw_date(self, obj):
         return obj.draw.draw_date
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DrawReport)
+class DrawReportAdmin(ModelAdmin):
+    list_display = (
+        'created_at',
+        'date_from',
+        'date_to',
+        'status',
+        'created_by',
+        'report_download',
+        'finished_at',
+    )
+    list_filter = ('status', 'created_at')
+    search_fields = ('celery_task_id', 'created_by__email')
+    readonly_fields = (
+        'date_from',
+        'date_to',
+        'status',
+        'created_by',
+        'celery_task_id',
+        'error',
+        'report_download',
+        'created_at',
+        'started_at',
+        'finished_at',
+    )
+    list_select_related = ('created_by',)
+    ordering = ('-created_at',)
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                '<int:object_id>/download/',
+                self.admin_site.admin_view(self.download_report),
+                name='draws_drawreport_download',
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def download_report(self, request, object_id):
+        report = get_object_or_404(DrawReport, pk=object_id)
+        if (
+            not self.has_view_permission(request, report)
+            or not report.report_file
+        ):
+            raise Http404
+        try:
+            return FileResponse(
+                report.report_file.open('rb'),
+                as_attachment=True,
+                filename=f'draw-report-{report.date_from}-{report.date_to}.xlsx',
+            )
+        except FileNotFoundError as error:
+            raise Http404 from error
+
+    @admin.display(description='Отчёт')
+    def report_download(self, obj):
+        if not obj or not obj.report_file:
+            return '—'
+        url = reverse('admin:draws_drawreport_download', args=(obj.pk,))
+        return format_html('<a href="{}">Скачать</a>', url)
 
     def has_add_permission(self, request):
         return False

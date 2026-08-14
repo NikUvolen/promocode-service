@@ -2,7 +2,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib import admin, messages
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
 from django.utils import timezone
@@ -14,6 +14,15 @@ from unfold.enums import ActionVariant
 from .forms import DrawReportForm
 from .models import Draw, DrawReport, Winner
 from .tasks import generate_draw_report_task, run_manual_draw_task
+
+
+def redirect_from_dialog(request, url_name):
+    url = reverse(url_name)
+    if request.headers.get('HX-Request') == 'true':
+        response = HttpResponse(status=204)
+        response['HX-Redirect'] = url
+        return response
+    return redirect(url)
 
 
 class WinnerInline(TabularInline):
@@ -130,10 +139,13 @@ class DrawAdmin(ModelAdmin):
             report.save(update_fields=('celery_task_id',))
             messages.success(
                 request,
-                'Отчёт поставлен в очередь. Ссылка появится в журнале '
-                'отчётов.',
+                'Отчёт поставлен в очередь. После завершения Celery ссылка '
+                '«Скачать» появится в созданной строке журнала отчётов.',
             )
-        return redirect('admin:draws_drawreport_changelist')
+        return redirect_from_dialog(
+            request,
+            'admin:draws_drawreport_changelist',
+        )
 
     def has_add_permission(self, request):
         return False

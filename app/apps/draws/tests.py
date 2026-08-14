@@ -45,6 +45,14 @@ class DrawsAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_report_dialog_uses_native_date_inputs(self):
+        response = self.client.get(
+            reverse('admin:draws_draw_generate_report'),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="date"', count=2)
+
     @patch('draws.admin.timezone.now')
     @patch('draws.admin.run_manual_draw_task.delay')
     def test_starts_manual_draw_from_admin(self, delay, now):
@@ -90,6 +98,27 @@ class DrawsAdminTests(TestCase):
         self.assertEqual(report.date_to.isoformat(), '2026-08-13')
         self.assertEqual(report.celery_task_id, 'report-task-id')
         delay.assert_called_once_with(report.pk)
+
+    @patch('draws.admin.generate_draw_report_task.delay')
+    def test_report_dialog_redirects_htmx_to_report_log(self, delay):
+        delay.return_value = SimpleNamespace(id='report-task-id')
+
+        response = self.client.post(
+            reverse('admin:draws_draw_generate_report'),
+            {
+                '_form_submitted': True,
+                'date_from': '',
+                'date_to': '',
+            },
+            headers={'HX-Request': 'true'},
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response.headers['HX-Redirect'],
+            reverse('admin:draws_drawreport_changelist'),
+        )
+        self.assertTrue(DrawReport.objects.exists())
 
     @patch('draws.admin.generate_draw_report_task.delay')
     def test_rejects_report_with_reversed_period(self, delay):

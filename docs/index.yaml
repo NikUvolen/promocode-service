@@ -1,0 +1,23 @@
+title: Gear Drop
+description: Документация платформы регистрации промокодов и ежедневных розыгрышей.
+meta:
+  title: Gear Drop documentation
+links:
+  - title: Обзор проекта
+    description: Пользовательские сценарии, правила акции и технологический стек.
+    href: overview.md
+  - title: Архитектура
+    description: Слои приложения, модели данных и границы ответственности.
+    href: architecture.md
+  - title: Локальная разработка
+    description: Подготовка окружения, запуск компонентов и тестирование.
+    href: local-development.md
+  - title: API и авторизация
+    description: Маршруты DRF, cookie-based JWT и CSRF.
+    href: api.md
+  - title: Администрирование
+    description: Промокоды, XLSX, розыгрыши, отчеты и аудит.
+    href: administration.md
+  - title: Развертывание
+    description: Docker Compose, проверка состояния и обновление сервиса.
+    href: deployment.md

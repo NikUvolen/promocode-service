@@ -231,3 +231,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 celerybeat-schedule*
+
+# Diplodoc build output
+_site/

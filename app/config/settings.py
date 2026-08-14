@@ -161,6 +161,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_ROOT = BASE_DIR / 'media'
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
@@ -226,7 +227,22 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=0, minute=0),
         'options': {'expires': 60 * 60},
     },
+    'cleanup-expired-import-files': {
+        'task': 'promo.tasks.cleanup_expired_import_files_task',
+        'schedule': crontab(hour=3, minute=30),
+        'options': {'expires': 60 * 60},
+    },
+    'cleanup-expired-report-files': {
+        'task': 'draws.tasks.cleanup_expired_report_files_task',
+        'schedule': crontab(hour=3, minute=35),
+        'options': {'expires': 60 * 60},
+    },
 }
+
+XLSX_MAX_UPLOAD_SIZE = int(getenv('XLSX_MAX_UPLOAD_SIZE', str(20 * 1024 * 1024)))
+GENERATED_FILE_RETENTION_DAYS = int(
+    getenv('GENERATED_FILE_RETENTION_DAYS', '7')
+)
 
 AUTH_USER_MODEL = 'accounts.User'
 

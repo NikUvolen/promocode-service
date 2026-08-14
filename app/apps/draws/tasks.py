@@ -7,9 +7,10 @@ from django.conf import settings
 from django.db import OperationalError
 from django.utils import timezone
 
-from draws.models import Draw
+from draws.models import Draw, DrawReport
 from draws.services.draw import run_draw
 from draws.services.notifications import send_winner_email
+from draws.services.reports import generate_draw_report
 
 
 @shared_task(
@@ -77,3 +78,52 @@ def run_manual_draw_task(draw_date, cutoff):
         'winner_count': draw.winners.count(),
         'already_completed': already_completed,
     }
+
+
+@shared_task(acks_late=True, reject_on_worker_lost=True)
+def generate_draw_report_task(report_id):
+    report = DrawReport.objects.get(pk=report_id)
+    if report.status == DrawReport.Status.COMPLETED:
+        return report.report_file.name
+
+    report.status = DrawReport.Status.RUNNING
+    report.started_at = report.started_at or timezone.now()
+    report.error = ''
+    report.save(update_fields=('status', 'started_at', 'error'))
+
+    try:
+        filename = generate_draw_report(report_id)
+    except Exception as error:
+        DrawReport.objects.filter(pk=report_id).update(
+            status=DrawReport.Status.FAILED,
+            error=str(error)[:2000],
+            finished_at=timezone.now(),
+        )
+        raise
+
+    DrawReport.objects.filter(pk=report_id).update(
+        status=DrawReport.Status.COMPLETED,
+        finished_at=timezone.now(),
+    )
+    return filename
+
+
+@shared_task
+def cleanup_expired_report_files_task():
+    cutoff = timezone.now() - timedelta(
+        days=settings.GENERATED_FILE_RETENTION_DAYS,
+    )
+    reports = DrawReport.objects.filter(created_at__lt=cutoff).exclude(
+        status=DrawReport.Status.RUNNING,
+    )
+    deleted_count = 0
+
+    for report in reports.iterator():
+        if not report.report_file:
+            continue
+        report.report_file.delete(save=False)
+        report.report_file = ''
+        report.save(update_fields=('report_file',))
+        deleted_count += 1
+
+    return deleted_count

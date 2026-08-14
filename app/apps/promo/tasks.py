@@ -1,14 +1,17 @@
 import smtplib
+from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
-from promo.models import PromoCodeGeneration
+from promo.models import PromoCodeGeneration, PromoCodeImport
 from promo.services.generation import (
     generate_promo_codes,
     promo_code_generation_lock,
 )
 from promo.services.notifications import send_registration_email
+from promo.services.xlsx_import import import_promo_codes
 
 
 @shared_task(
@@ -54,3 +57,57 @@ def _run_promo_code_generation(generation_id):
         finished_at=timezone.now(),
     )
     return generated_count
+
+
+@shared_task(acks_late=True, reject_on_worker_lost=True)
+def import_promo_codes_task(import_id):
+    import_job = PromoCodeImport.objects.get(pk=import_id)
+    if import_job.status == PromoCodeImport.Status.COMPLETED:
+        return import_job.imported_count
+
+    import_job.status = PromoCodeImport.Status.RUNNING
+    import_job.started_at = import_job.started_at or timezone.now()
+    import_job.error = ''
+    import_job.save(update_fields=('status', 'started_at', 'error'))
+
+    try:
+        result = import_promo_codes(import_id)
+    except Exception as error:
+        PromoCodeImport.objects.filter(pk=import_id).update(
+            status=PromoCodeImport.Status.FAILED,
+            error=str(error)[:2000],
+            finished_at=timezone.now(),
+        )
+        raise
+
+    PromoCodeImport.objects.filter(pk=import_id).update(
+        status=PromoCodeImport.Status.COMPLETED,
+        finished_at=timezone.now(),
+    )
+    return result
+
+
+@shared_task
+def cleanup_expired_import_files_task():
+    cutoff = timezone.now() - timedelta(
+        days=settings.GENERATED_FILE_RETENTION_DAYS,
+    )
+    imports = PromoCodeImport.objects.filter(created_at__lt=cutoff).exclude(
+        status=PromoCodeImport.Status.RUNNING,
+    )
+    deleted_count = 0
+
+    for import_job in imports.iterator():
+        changed_fields = []
+        for field_name in ('source_file', 'error_file'):
+            field = getattr(import_job, field_name)
+            if not field:
+                continue
+            field.delete(save=False)
+            setattr(import_job, field_name, '')
+            changed_fields.append(field_name)
+            deleted_count += 1
+        if changed_fields:
+            import_job.save(update_fields=changed_fields)
+
+    return deleted_count

@@ -161,6 +161,7 @@ venv.bak/
 
 # Collected Django static files
 app/staticfiles/
+app/media/
 
 # Spyder project settings
 .spyderproject

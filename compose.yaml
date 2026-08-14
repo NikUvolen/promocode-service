@@ -31,6 +31,8 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    volumes:
+      - media_data:/srv/app/app/media
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -75,6 +77,8 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    volumes:
+      - media_data:/srv/app/app/media
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -91,6 +95,8 @@ services:
       context: .
       target: backend
     restart: unless-stopped
+    volumes:
+      - media_data:/srv/app/app/media
     env_file:
       - path: ${ENV_FILE:-.env.production}
         format: raw
@@ -116,3 +122,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  media_data:

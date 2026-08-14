@@ -10,4 +10,5 @@ frontend/dist
 frontend/test-results
 frontend/playwright-report
 app/staticfiles
+app/media
 celerybeat-schedule*

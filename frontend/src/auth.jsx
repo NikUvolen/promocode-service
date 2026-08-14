@@ -2,53 +2,64 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 import {
   apiRequest,
-  clearTokens,
-  getTokens,
+  clearLegacyTokenStorage,
+  clearSession as notifySessionCleared,
   onSessionCleared,
-  saveTokens,
 } from './api'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [authenticated, setAuthenticated] = useState(() => Boolean(getTokens()))
+  const [authenticated, setAuthenticated] = useState(false)
+  const [ready, setReady] = useState(false)
 
-  useEffect(
-    () => onSessionCleared(() => setAuthenticated(false)),
-    [],
-  )
+  useEffect(() => {
+    let active = true
+    clearLegacyTokenStorage()
+    const unsubscribe = onSessionCleared(() => setAuthenticated(false))
+
+    apiRequest('session', { auth: true })
+      .then((session) => {
+        if (active) setAuthenticated(session.authenticated)
+      })
+      .catch(() => {
+        if (active) setAuthenticated(false)
+      })
+      .finally(() => {
+        if (active) setReady(true)
+      })
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
 
   const value = useMemo(
     () => ({
       authenticated,
+      ready,
       async login(credentials) {
-        const tokens = await apiRequest('login', {
+        await apiRequest('login', {
           method: 'POST',
           body: JSON.stringify(credentials),
         })
-        saveTokens(tokens)
         setAuthenticated(true)
       },
       async logout() {
-        const refresh = getTokens()?.refresh
         try {
-          if (refresh) {
-            await apiRequest('logout', {
-              method: 'POST',
-              body: JSON.stringify({ refresh }),
-            })
-          }
+          await apiRequest('logout', { method: 'POST' })
         } finally {
-          clearTokens()
+          notifySessionCleared()
           setAuthenticated(false)
         }
       },
       clearSession() {
-        clearTokens()
+        notifySessionCleared()
         setAuthenticated(false)
       },
     }),
-    [authenticated],
+    [authenticated, ready],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

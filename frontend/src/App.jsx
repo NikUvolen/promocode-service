@@ -11,7 +11,8 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 
 function ProtectedRoute({ children }) {
-  const { authenticated } = useAuth()
+  const { authenticated, ready } = useAuth()
+  if (!ready) return null
   return authenticated ? children : <Navigate to="/login" replace />
 }
 

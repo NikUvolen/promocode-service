@@ -45,6 +45,21 @@ class DrawsAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_dashboard_contains_draw_shortcuts(self):
+        response = self.client.get(reverse('admin:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Провести розыгрыш')
+        self.assertContains(response, 'Выгрузить статистику XLSX')
+        self.assertContains(
+            response,
+            reverse('admin:draws_draw_run_manual_draw'),
+        )
+        self.assertContains(
+            response,
+            reverse('admin:draws_draw_generate_report'),
+        )
+
     def test_report_dialog_uses_native_date_inputs(self):
         response = self.client.get(
             reverse('admin:draws_draw_generate_report'),

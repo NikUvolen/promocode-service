@@ -725,7 +725,10 @@ class PromoCodeApiTests(TestCase):
         self.assertEqual(codes[winning_code.code]['status'], 'won')
         self.assertEqual(
             codes[winning_code.code]['prize'],
-            {'code': Winner.Prize.AIRPODS, 'name': 'AirPods'},
+            {
+                'code': Winner.Prize.AIRPODS,
+                'name': 'Наушники AirPods',
+            },
         )
         self.assertEqual(
             codes[participating_code.code]['status'],

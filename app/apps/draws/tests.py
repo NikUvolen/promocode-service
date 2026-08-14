@@ -325,7 +325,7 @@ class PublicDrawApiTests(TestCase):
                 {
                     'name': 'Михаил И.',
                     'prize_code': Winner.Prize.AIRPODS,
-                    'prize_name': 'AirPods',
+                    'prize_name': 'Наушники AirPods',
                 }
             ],
         )

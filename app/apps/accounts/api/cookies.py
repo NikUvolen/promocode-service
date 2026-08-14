@@ -24,17 +24,13 @@ def set_auth_cookies(response, tokens):
 
 
 def clear_auth_cookies(response):
-    common = {
-        'secure': settings.JWT_COOKIE_SECURE,
-        'samesite': settings.JWT_COOKIE_SAMESITE,
-    }
     response.delete_cookie(
         settings.JWT_ACCESS_COOKIE_NAME,
         path='/api/v1/',
-        **common,
+        samesite=settings.JWT_COOKIE_SAMESITE,
     )
     response.delete_cookie(
         settings.JWT_REFRESH_COOKIE_NAME,
         path='/api/v1/auth/',
-        **common,
+        samesite=settings.JWT_COOKIE_SAMESITE,
     )

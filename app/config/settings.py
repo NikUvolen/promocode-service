@@ -83,6 +83,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+if IS_TESTING:
+    MIDDLEWARE.remove('whitenoise.middleware.WhiteNoiseMiddleware')
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -158,6 +161,11 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+if IS_TESTING:
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
 
 
 # Internationalization
@@ -292,8 +300,16 @@ PASSWORD_RESET_RESEND_INTERVAL = int(
 
 # Celery
 
-CELERY_BROKER_URL = getenv('CELERY_BROKER_URL', f'{REDIS_URL}/0')
-CELERY_RESULT_BACKEND = getenv('CELERY_RESULT_BACKEND', f'{REDIS_URL}/2')
+CELERY_BROKER_URL = (
+    'memory://'
+    if IS_TESTING
+    else getenv('CELERY_BROKER_URL', f'{REDIS_URL}/0')
+)
+CELERY_RESULT_BACKEND = (
+    'cache+memory://'
+    if IS_TESTING
+    else getenv('CELERY_RESULT_BACKEND', f'{REDIS_URL}/2')
+)
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
 CELERY_TASK_SERIALIZER = 'json'
@@ -312,7 +328,10 @@ CELERY_TASK_PUBLISH_RETRY_POLICY = {
     'interval_max': 2,
 }
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_ALWAYS_EAGER = env_bool('CELERY_TASK_ALWAYS_EAGER', False)
+CELERY_TASK_ALWAYS_EAGER = IS_TESTING or env_bool(
+    'CELERY_TASK_ALWAYS_EAGER',
+    False,
+)
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TASK_DEFAULT_QUEUE = 'bulk'
 CELERY_TASK_ROUTES = {

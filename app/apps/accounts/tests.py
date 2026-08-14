@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core import mail
 from django.test import override_settings
 from django.test import TestCase
@@ -46,6 +47,7 @@ class RegistrationApiTests(TestCase):
 
     @patch('accounts.services.registration.schedule_verification_email')
     def test_registers_user_and_profile(self, schedule_email):
+        schedule_email.return_value = True
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
                 self.register_url,
@@ -195,14 +197,20 @@ class JwtAuthApiTests(TestCase):
             content_type='application/json',
         )
 
-    def test_login_returns_token_pair(self):
+    def test_login_sets_token_cookies(self):
         user = self.create_user()
 
         response = self.login()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('access', response.json())
-        self.assertIn('refresh', response.json())
+        self.assertIn(settings.JWT_ACCESS_COOKIE_NAME, response.cookies)
+        self.assertIn(settings.JWT_REFRESH_COOKIE_NAME, response.cookies)
+        self.assertTrue(
+            response.cookies[settings.JWT_ACCESS_COOKIE_NAME]['httponly']
+        )
+        self.assertTrue(
+            response.cookies[settings.JWT_REFRESH_COOKIE_NAME]['httponly']
+        )
         user.refresh_from_db()
         self.assertIsNotNone(user.last_login)
 
@@ -232,28 +240,22 @@ class JwtAuthApiTests(TestCase):
     def test_refresh_rotates_token_and_logout_blacklists_it(self):
         self.create_user()
         login_response = self.login()
-        refresh = login_response.json()['refresh']
+        refresh = login_response.cookies[
+            settings.JWT_REFRESH_COOKIE_NAME
+        ].value
 
-        refresh_response = self.client.post(
-            self.refresh_url,
-            {'refresh': refresh},
-            content_type='application/json',
-        )
+        refresh_response = self.client.post(self.refresh_url)
 
         self.assertEqual(refresh_response.status_code, 200)
-        rotated_refresh = refresh_response.json()['refresh']
-        logout_response = self.client.post(
-            self.logout_url,
-            {'refresh': rotated_refresh},
-            content_type='application/json',
-        )
+        rotated_refresh = refresh_response.cookies[
+            settings.JWT_REFRESH_COOKIE_NAME
+        ].value
+        self.assertNotEqual(refresh, rotated_refresh)
+        logout_response = self.client.post(self.logout_url)
         self.assertEqual(logout_response.status_code, 204)
 
-        reused_response = self.client.post(
-            self.refresh_url,
-            {'refresh': rotated_refresh},
-            content_type='application/json',
-        )
+        self.client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = rotated_refresh
+        reused_response = self.client.post(self.refresh_url)
         self.assertEqual(reused_response.status_code, 400)
 
 
@@ -338,11 +340,8 @@ class PasswordResetApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('NewPassword_456!'))
-        refresh_response = self.client.post(
-            self.refresh_url,
-            {'refresh': refresh},
-            content_type='application/json',
-        )
+        self.client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = refresh
+        refresh_response = self.client.post(self.refresh_url)
         self.assertEqual(refresh_response.status_code, 400)
 
     def test_rejects_invalid_reset_token(self):
@@ -416,11 +415,10 @@ class ChangePasswordApiTests(TestCase):
         self.assertEqual(response.status_code, 204)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('NewPassword_456!'))
-        refresh_response = self.client.post(
-            self.refresh_url,
-            {'refresh': self.tokens['refresh']},
-            content_type='application/json',
+        self.client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = (
+            self.tokens['refresh']
         )
+        refresh_response = self.client.post(self.refresh_url)
         self.assertEqual(refresh_response.status_code, 400)
 
     def test_rejects_invalid_old_password(self):

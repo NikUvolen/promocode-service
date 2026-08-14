@@ -60,6 +60,7 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             'promo.tasks.cleanup_expired_import_files_task': 'bulk',
             'draws.tasks.cleanup_expired_report_files_task': 'bulk',
             'core.tasks.cleanup_expired_audit_logs_task': 'bulk',
+            'core.tasks.fail_stale_background_jobs_task': 'bulk',
         }
 
         self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'bulk')

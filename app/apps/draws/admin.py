@@ -123,7 +123,10 @@ class DrawAdmin(ModelAdmin):
                 request,
                 f'Розыгрыш поставлен в очередь. ID задачи: {task.id}.',
             )
-        return redirect('admin:draws_draw_changelist')
+        return redirect_from_dialog(
+            request,
+            'admin:draws_draw_changelist',
+        )
 
     @action(
         description='Выгрузить статистику XLSX',

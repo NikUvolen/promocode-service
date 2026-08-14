@@ -65,6 +65,10 @@ class CeleryQueueRoutingTests(SimpleTestCase):
 
         self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'bulk')
         self.assertEqual(
+            {queue.name for queue in settings.CELERY_TASK_QUEUES},
+            {'critical', 'notifications', 'bulk'},
+        )
+        self.assertEqual(
             {
                 task_name: route['queue']
                 for task_name, route in settings.CELERY_TASK_ROUTES.items()

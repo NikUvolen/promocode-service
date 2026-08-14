@@ -45,20 +45,11 @@ class DrawsAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
-    def test_dashboard_contains_draw_shortcuts(self):
+    def test_dashboard_does_not_contain_draw_shortcuts(self):
         response = self.client.get(reverse('admin:index'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Провести розыгрыш')
-        self.assertContains(response, 'Выгрузить статистику XLSX')
-        self.assertContains(
-            response,
-            reverse('admin:draws_draw_run_manual_draw'),
-        )
-        self.assertContains(
-            response,
-            reverse('admin:draws_draw_generate_report'),
-        )
+        self.assertNotContains(response, 'Быстрые действия')
 
     def test_report_dialog_uses_native_date_inputs(self):
         response = self.client.get(
@@ -89,6 +80,27 @@ class DrawsAdminTests(TestCase):
         delay.assert_called_once_with(
             '2026-08-13',
             cutoff.isoformat(),
+        )
+
+    @patch('draws.admin.timezone.now')
+    @patch('draws.admin.run_manual_draw_task.delay')
+    def test_manual_draw_dialog_redirects_with_htmx(self, delay, now):
+        cutoff = datetime(
+            2026, 8, 13, 9, 30, tzinfo=ZoneInfo('Europe/Moscow')
+        )
+        now.return_value = cutoff
+        delay.return_value = SimpleNamespace(id='manual-task-id')
+
+        response = self.client.post(
+            reverse('admin:draws_draw_run_manual_draw'),
+            {'_form_submitted': True},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response.headers['HX-Redirect'],
+            reverse('admin:draws_draw_changelist'),
         )
 
     @patch('draws.admin.generate_draw_report_task.delay')

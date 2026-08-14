@@ -6,6 +6,7 @@ from os import getenv
 from celery.schedules import crontab
 from django.urls import reverse_lazy
 from dotenv import load_dotenv
+from kombu import Queue
 
 
 load_dotenv()
@@ -335,6 +336,11 @@ CELERY_TASK_ALWAYS_EAGER = IS_TESTING or env_bool(
 )
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TASK_DEFAULT_QUEUE = 'bulk'
+CELERY_TASK_QUEUES = (
+    Queue('critical'),
+    Queue('notifications'),
+    Queue('bulk'),
+)
 CELERY_TASK_ROUTES = {
     'draws.tasks.run_daily_draw_task': {'queue': 'critical'},
     'draws.tasks.run_manual_draw_task': {'queue': 'critical'},

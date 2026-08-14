@@ -87,13 +87,33 @@ class PromoAdminTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse('admin:promo_promocode_changelist'),
+            reverse('admin:promo_promocodegeneration_changelist'),
         )
         generation = PromoCodeGeneration.objects.get()
         self.assertEqual(generation.requested_count, 250_000)
         self.assertEqual(generation.created_by, self.admin_user)
         self.assertEqual(generation.celery_task_id, 'celery-task-id')
         delay.assert_called_once_with(generation.pk)
+
+    @patch('promo.admin.generate_promo_codes_task.delay')
+    def test_generation_dialog_redirects_to_generation_list(self, delay):
+        delay.return_value = SimpleNamespace(id='celery-task-id')
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_generate_codes'),
+            {
+                '_form_submitted': True,
+                'count': 250_000,
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response.headers['HX-Redirect'],
+            reverse('admin:promo_promocodegeneration_changelist'),
+        )
+        self.assertEqual(PromoCodeGeneration.objects.count(), 1)
 
     @patch('promo.admin.generate_promo_codes_task.delay')
     def test_rejects_second_active_generation(self, delay):
@@ -140,6 +160,31 @@ class PromoAdminTests(TestCase):
         self.assertEqual(import_job.original_filename, 'codes.xlsx')
         self.assertEqual(import_job.celery_task_id, 'import-task-id')
         delay.assert_called_once_with(import_job.pk)
+
+    @patch('promo.admin.import_promo_codes_task.delay')
+    def test_import_dialog_redirects_to_import_list(self, delay):
+        delay.return_value = SimpleNamespace(id='import-task-id')
+        upload = SimpleUploadedFile(
+            'codes.xlsx',
+            _xlsx_bytes([('AB12CD34',)]),
+            content_type=(
+                'application/vnd.openxmlformats-officedocument.'
+                'spreadsheetml.sheet'
+            ),
+        )
+
+        response = self.client.post(
+            reverse('admin:promo_promocode_import_codes'),
+            {'_form_submitted': True, 'file': upload},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response.headers['HX-Redirect'],
+            reverse('admin:promo_promocodeimport_changelist'),
+        )
+        self.assertEqual(PromoCodeImport.objects.count(), 1)
 
     @override_settings(XLSX_MAX_UPLOAD_SIZE=5)
     @patch('promo.admin.import_promo_codes_task.delay')

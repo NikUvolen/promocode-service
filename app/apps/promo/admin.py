@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.contrib import admin, messages
 from django.db import IntegrityError, transaction
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
 from django.utils import timezone
@@ -19,6 +19,15 @@ from .models import (
     PromoCodeImport,
 )
 from .tasks import generate_promo_codes_task, import_promo_codes_task
+
+
+def redirect_from_dialog(request, url_name):
+    url = reverse(url_name)
+    if request.headers.get('HX-Request') == 'true':
+        response = HttpResponse(status=204)
+        response['HX-Redirect'] = url
+        return response
+    return redirect(url)
 
 
 @admin.register(PromoCode)
@@ -75,7 +84,10 @@ class PromoCodeAdmin(ModelAdmin):
                 request,
                 'Дождитесь завершения текущей генерации промокодов.',
             )
-            return redirect('admin:promo_promocode_changelist')
+            return redirect_from_dialog(
+                request,
+                'admin:promo_promocodegeneration_changelist',
+            )
 
         try:
             task = generate_promo_codes_task.delay(generation.pk)
@@ -93,10 +105,11 @@ class PromoCodeAdmin(ModelAdmin):
             generation.save(update_fields=('celery_task_id',))
             messages.success(
                 request,
-                f'Генерация {generation.requested_count:,} кодов поставлена в очередь.',
+                f'Генерация {generation.requested_count:,} кодов поставлена в очередь. '
+                'Статус можно отслеживать в журнале генераций.',
             )
 
-        return redirect('admin:promo_promocode_changelist')
+        return redirect_from_dialog(request, 'admin:promo_promocodegeneration_changelist')
 
     @action(
         description='Импортировать XLSX',
@@ -141,7 +154,7 @@ class PromoCodeAdmin(ModelAdmin):
                 'импортов.',
             )
 
-        return redirect('admin:promo_promocodeimport_changelist')
+        return redirect_from_dialog(request, 'admin:promo_promocodeimport_changelist')
 
     @admin.display(boolean=True, description='Зарегистрирован')
     def is_registered(self, obj):

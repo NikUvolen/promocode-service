@@ -1,6 +1,6 @@
 {% extends 'admin/base.html' %}
 
-{% load i18n unfold %}
+{% load i18n %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
 
@@ -9,32 +9,6 @@
 {% endblock %}
 
 {% block content %}
-    {% if perms.draws.view_draw %}
-        {% url 'admin:draws_draw_run_manual_draw' as run_draw_url %}
-        {% url 'admin:draws_draw_generate_report' as generate_report_url %}
-
-        <section class="border border-base-200 flex flex-col gap-4 mb-6 p-4 rounded-default sm:flex-row sm:items-center sm:justify-between dark:border-base-800">
-            <div>
-                <h2 class="font-semibold text-base-900 dark:text-base-100">
-                    Быстрые действия
-                </h2>
-                <p class="mt-1 text-base-500 dark:text-base-400">
-                    Запуск розыгрыша и формирование статистики по акции.
-                </p>
-            </div>
-
-            <div class="flex flex-col gap-2 self-end sm:flex-row sm:ml-auto">
-                {% component "unfold/components/button.html" with href=run_draw_url icon="casino" variant="default" extra_attrs='hx-get="'|add:run_draw_url|add:'" hx-target="#modal-content" hx-select="#dialog" x-on:htmx:after-on-load="openModal = true"' %}
-                    Провести розыгрыш
-                {% endcomponent %}
-
-                {% component "unfold/components/button.html" with href=generate_report_url icon="download" extra_attrs='hx-get="'|add:generate_report_url|add:'" hx-target="#modal-content" hx-select="#dialog" x-on:htmx:after-on-load="openModal = true"' %}
-                    Выгрузить статистику XLSX
-                {% endcomponent %}
-            </div>
-        </section>
-    {% endif %}
-
     <div class="flex flex-col lg:flex-row lg:gap-8">
         <div class="grow">
             {% include "unfold/helpers/app_list_default.html" %}

@@ -30,7 +30,7 @@ Useful commands:
 
 ```bash
 docker compose -p gear-drop --env-file .env.production ps
-docker compose -p gear-drop --env-file .env.production logs -f backend worker-critical worker-bulk beat
+docker compose -p gear-drop --env-file .env.production logs -f backend worker-critical worker-notifications worker-bulk beat
 docker compose -p gear-drop --env-file .env.production exec backend python manage.py migrate
 docker compose -p gear-drop --env-file .env.production down
 ```

@@ -270,6 +270,7 @@ class DetailResponseSerializer(serializers.Serializer):
 
 class RegistrationResponseSerializer(DetailResponseSerializer):
     email = serializers.EmailField()
+    email_queued = serializers.BooleanField()
 
 
 class TokenPairResponseSerializer(serializers.Serializer):

@@ -39,6 +39,10 @@ class PasswordResetRateLimited(Exception):
         super().__init__('Password reset email requested too frequently.')
 
 
+class EmailQueueUnavailable(Exception):
+    pass
+
+
 def create_password_reset_credentials(user):
     return {
         'uid': urlsafe_base64_encode(force_bytes(user.pk)),
@@ -74,12 +78,18 @@ def schedule_password_reset_email(user_id):
     from accounts.tasks import send_password_reset_email_task
 
     try:
-        send_password_reset_email_task.delay(user_id)
+        send_password_reset_email_task.apply_async(
+            args=(user_id,),
+            retry=True,
+            retry_policy={'max_retries': 3, 'interval_start': 0.2},
+        )
     except Exception:
         logger.exception(
             'Failed to enqueue password reset email for user %s',
             user_id,
         )
+        return False
+    return True
 
 
 def request_password_reset(email):
@@ -96,7 +106,9 @@ def request_password_reset(email):
         is_email_verified=True,
     ).first()
     if user is not None and user.has_usable_password():
-        schedule_password_reset_email(user.pk)
+        if not schedule_password_reset_email(user.pk):
+            cache.delete(cooldown_key)
+            raise EmailQueueUnavailable
 
 
 def reset_password(*, uid, token, new_password):

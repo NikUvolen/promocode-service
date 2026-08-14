@@ -9,6 +9,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from accounts.models import Profile
 from accounts.services.registration import resend_verification_email
 from accounts.services.passwords import (
+    EmailQueueUnavailable,
     PasswordResetRateLimited,
     request_password_reset,
 )
@@ -54,7 +55,13 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(
             {
                 'email': user.email,
-                'detail': 'Письмо для подтверждения email отправлено.',
+                'email_queued': user.verification_email_queued,
+                'detail': (
+                    'Письмо для подтверждения email поставлено в очередь.'
+                    if user.verification_email_queued
+                    else 'Аккаунт создан, но письмо пока не отправлено. '
+                    'Запросите его повторно через минуту.'
+                ),
             },
             status=status.HTTP_201_CREATED,
         )
@@ -86,7 +93,12 @@ class AuthViewSet(viewsets.GenericViewSet):
     def resend_verification(self, request):
         serializer = ResendVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        resend_verification_email(serializer.validated_data['email'])
+        queued = resend_verification_email(serializer.validated_data['email'])
+        if not queued:
+            return Response(
+                {'detail': 'Сервис отправки писем временно недоступен.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             {
                 'detail': (
@@ -120,6 +132,11 @@ class AuthViewSet(viewsets.GenericViewSet):
                     'retry_after': exc.retry_after,
                 },
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except EmailQueueUnavailable:
+            return Response(
+                {'detail': 'Сервис отправки писем временно недоступен.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(
             {

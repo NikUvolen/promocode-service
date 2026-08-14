@@ -53,6 +53,7 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             'accounts.tasks.send_password_reset_email_task': 'notifications',
             'promo.tasks.send_registration_email_task': 'notifications',
             'draws.tasks.send_winner_email_task': 'notifications',
+            'draws.tasks.retry_unnotified_winner_emails_task': 'notifications',
             'promo.tasks.generate_promo_codes_task': 'bulk',
             'promo.tasks.import_promo_codes_task': 'bulk',
             'draws.tasks.generate_draw_report_task': 'bulk',

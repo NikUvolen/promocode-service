@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from core.audit import log_audit_event
 from core.models import AuditLog
-from draws.models import Draw, DrawReport
+from draws.models import Draw, DrawReport, Winner
 from draws.services.draw import run_draw
 from draws.services.notifications import send_winner_email
 from draws.services.reports import generate_draw_report
@@ -25,6 +25,18 @@ from draws.services.reports import generate_draw_report
 )
 def send_winner_email_task(winner_id):
     return send_winner_email(winner_id)
+
+
+@shared_task
+def retry_unnotified_winner_emails_task():
+    winner_ids = list(
+        Winner.objects.filter(notified_at__isnull=True)
+        .order_by('won_at')
+        .values_list('pk', flat=True)[:100]
+    )
+    for winner_id in winner_ids:
+        send_winner_email_task.delay(winner_id)
+    return len(winner_ids)
 
 
 @shared_task(

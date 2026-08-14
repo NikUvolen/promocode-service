@@ -336,6 +336,7 @@ CELERY_TASK_ROUTES = {
     'promo.tasks.cleanup_expired_import_files_task': {'queue': 'bulk'},
     'draws.tasks.cleanup_expired_report_files_task': {'queue': 'bulk'},
     'core.tasks.cleanup_expired_audit_logs_task': {'queue': 'bulk'},
+    'core.tasks.fail_stale_background_jobs_task': {'queue': 'bulk'},
 }
 CELERY_BEAT_SCHEDULE = {
     'run-daily-draw-at-moscow-midnight': {
@@ -363,6 +364,11 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=3, minute=45),
         'options': {'expires': 60 * 60},
     },
+    'fail-stale-background-jobs': {
+        'task': 'core.tasks.fail_stale_background_jobs_task',
+        'schedule': crontab(minute='*/15'),
+        'options': {'expires': 15 * 60},
+    },
 }
 
 XLSX_MAX_UPLOAD_SIZE = int(getenv('XLSX_MAX_UPLOAD_SIZE', str(20 * 1024 * 1024)))
@@ -370,6 +376,12 @@ GENERATED_FILE_RETENTION_DAYS = int(
     getenv('GENERATED_FILE_RETENTION_DAYS', '7')
 )
 AUDIT_LOG_RETENTION_DAYS = int(getenv('AUDIT_LOG_RETENTION_DAYS', '180'))
+BACKGROUND_JOB_QUEUE_TIMEOUT = int(
+    getenv('BACKGROUND_JOB_QUEUE_TIMEOUT', str(24 * 60 * 60))
+)
+BACKGROUND_JOB_RUNNING_TIMEOUT = int(
+    getenv('BACKGROUND_JOB_RUNNING_TIMEOUT', str(6 * 60 * 60))
+)
 
 AUTH_USER_MODEL = 'accounts.User'
 

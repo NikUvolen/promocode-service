@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     email: '',
     password: '',
+    confirm_password: '',
     personal_data_consent: false,
   })
   const [error, setError] = useState(null)
@@ -45,7 +46,7 @@ export default function RegisterPage() {
       title="Регистрация"
       description="Создайте аккаунт, чтобы регистрировать промокоды."
     >
-      {error && !fieldError(error, 'email') && !fieldError(error, 'password') && !fieldError(error, 'personal_data_consent') && (
+      {error && !fieldError(error, 'email') && !fieldError(error, 'password') && !fieldError(error, 'confirm_password') && !fieldError(error, 'personal_data_consent') && (
         <StatusMessage type="error">{error.message}</StatusMessage>
       )}
       <form className="auth-form" onSubmit={handleSubmit}>
@@ -58,6 +59,17 @@ export default function RegisterPage() {
           value={form.email}
           error={fieldError(error, 'email')}
           onChange={(event) => setForm({ ...form, email: event.target.value })}
+          required
+        />
+        <FormField
+          id="confirm-password"
+          label="Повторите пароль"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Введите пароль ещё раз"
+          value={form.confirm_password}
+          error={fieldError(error, 'confirm_password')}
+          onChange={(event) => setForm({ ...form, confirm_password: event.target.value })}
           required
         />
         <FormField

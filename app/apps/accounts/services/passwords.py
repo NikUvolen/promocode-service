@@ -1,4 +1,5 @@
 import logging
+import hashlib
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -6,6 +7,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
+from django.core.cache import cache
 from django.db import transaction
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -29,6 +31,12 @@ class InvalidNewPassword(Exception):
 
 class InvalidOldPassword(Exception):
     pass
+
+
+class PasswordResetRateLimited(Exception):
+    def __init__(self, retry_after):
+        self.retry_after = retry_after
+        super().__init__('Password reset email requested too frequently.')
 
 
 def create_password_reset_credentials(user):
@@ -76,6 +84,12 @@ def schedule_password_reset_email(user_id):
 
 def request_password_reset(email):
     normalized_email = User.objects.normalize_email(email).lower()
+    email_digest = hashlib.sha256(normalized_email.encode()).hexdigest()
+    cooldown_key = f'password-reset-cooldown:{email_digest}'
+    cooldown = settings.PASSWORD_RESET_RESEND_INTERVAL
+    if not cache.add(cooldown_key, True, timeout=cooldown):
+        raise PasswordResetRateLimited(cooldown)
+
     user = User.objects.filter(
         email=normalized_email,
         is_active=True,

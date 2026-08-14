@@ -141,6 +141,7 @@ test('auth routes render their forms', async ({ page }, testInfo) => {
 
   await page.goto('/register')
   await expect(page.getByRole('heading', { level: 1, name: 'Регистрация' })).toBeVisible()
+  await expect(page.getByLabel('Повторите пароль')).toBeVisible()
   await expect(page.getByText('Согласен на обработку персональных данных')).toBeVisible()
 
   await page.goto('/forgot-password')

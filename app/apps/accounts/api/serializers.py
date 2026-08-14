@@ -38,6 +38,10 @@ from accounts.services.profile import (
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
+    confirm_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+    )
     personal_data_consent = serializers.BooleanField(write_only=True)
 
     def validate_email(self, value):
@@ -59,7 +63,15 @@ class RegisterSerializer(serializers.Serializer):
             )
         return value
 
+    def validate(self, attrs):
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError(
+                {'confirm_password': 'Пароли не совпадают.'}
+            )
+        return attrs
+
     def create(self, validated_data):
+        validated_data.pop('confirm_password')
         try:
             return register_user(**validated_data)
         except EmailAlreadyRegistered as exc:

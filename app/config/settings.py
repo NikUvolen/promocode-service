@@ -276,6 +276,9 @@ EMAIL_VERIFICATION_TIMEOUT = int(
     getenv('EMAIL_VERIFICATION_TIMEOUT', str(24 * 60 * 60))
 )
 PASSWORD_RESET_TIMEOUT = int(getenv('PASSWORD_RESET_TIMEOUT', '3600'))
+PASSWORD_RESET_RESEND_INTERVAL = int(
+    getenv('PASSWORD_RESET_RESEND_INTERVAL', '60')
+)
 
 
 # Celery
@@ -351,6 +354,12 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_register': getenv('AUTH_REGISTER_RATE', '5/hour'),
+        'auth_login': getenv('AUTH_LOGIN_RATE', '10/minute'),
+        'auth_email': getenv('AUTH_EMAIL_RATE', '5/hour'),
+        'auth_refresh': getenv('AUTH_REFRESH_RATE', '30/minute'),
+    },
 }
 
 SIMPLE_JWT = {

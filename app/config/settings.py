@@ -433,6 +433,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler',
     'DEFAULT_THROTTLE_RATES': {
         'auth_register': getenv('AUTH_REGISTER_RATE', '5/hour'),
         'auth_login': getenv('AUTH_LOGIN_RATE', '10/minute'),

@@ -4,9 +4,11 @@ from django.conf import settings
 from django.test import override_settings, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.exceptions import Throttled
 
 from accounts.models import User
 from config.celery import app as celery_app
+from core.exceptions import api_exception_handler
 from core.models import AuditLog
 from core.tasks import cleanup_expired_audit_logs_task
 
@@ -43,6 +45,24 @@ class ApiDocumentationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="swagger-ui"')
+
+
+class ApiExceptionHandlerTests(SimpleTestCase):
+    def test_throttle_error_is_returned_in_russian(self):
+        response = api_exception_handler(Throttled(wait=3565), {})
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(
+            response.data,
+            {
+                'detail': (
+                    'Слишком много запросов. Повторите попытку через '
+                    '59 мин. 25 сек.'
+                ),
+                'retry_after': 3565,
+            },
+        )
+        self.assertEqual(response['Retry-After'], '3565')
 
 
 class CeleryQueueRoutingTests(SimpleTestCase):

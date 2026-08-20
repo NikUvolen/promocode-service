@@ -62,17 +62,6 @@ export default function RegisterPage() {
           required
         />
         <FormField
-          id="confirm-password"
-          label="Повторите пароль"
-          type="password"
-          autoComplete="new-password"
-          placeholder="Введите пароль ещё раз"
-          value={form.confirm_password}
-          error={fieldError(error, 'confirm_password')}
-          onChange={(event) => setForm({ ...form, confirm_password: event.target.value })}
-          required
-        />
-        <FormField
           id="password"
           label="Пароль"
           type="password"
@@ -82,6 +71,17 @@ export default function RegisterPage() {
           value={form.password}
           error={fieldError(error, 'password')}
           onChange={(event) => setForm({ ...form, password: event.target.value })}
+          required
+        />
+        <FormField
+          id="confirm-password"
+          label="Повторите пароль"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Введите пароль ещё раз"
+          value={form.confirm_password}
+          error={fieldError(error, 'confirm_password')}
+          onChange={(event) => setForm({ ...form, confirm_password: event.target.value })}
           required
         />
         <label className="checkbox-field">

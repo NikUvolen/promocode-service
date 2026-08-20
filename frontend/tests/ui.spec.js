@@ -147,7 +147,13 @@ test('auth routes render their forms', async ({ page }, testInfo) => {
 
   await page.goto('/register')
   await expect(page.getByRole('heading', { level: 1, name: 'Регистрация' })).toBeVisible()
-  await expect(page.getByLabel('Повторите пароль')).toBeVisible()
+  const passwordField = page.getByLabel('Пароль', { exact: true })
+  const confirmationField = page.getByLabel('Повторите пароль')
+  await expect(passwordField).toBeVisible()
+  await expect(confirmationField).toBeVisible()
+  const passwordBox = await passwordField.boundingBox()
+  const confirmationBox = await confirmationField.boundingBox()
+  expect(passwordBox.y).toBeLessThan(confirmationBox.y)
   await expect(page.getByText('Согласен на обработку персональных данных')).toBeVisible()
 
   await page.goto('/forgot-password')

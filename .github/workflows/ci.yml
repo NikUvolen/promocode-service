@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend
+    name: CI / Backend
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -74,7 +74,7 @@ jobs:
         run: uv run python app/manage.py test
 
   frontend:
-    name: Frontend
+    name: CI / Frontend
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -117,7 +117,7 @@ jobs:
           retention-days: 7
 
   docker:
-    name: Docker build
+    name: CI / Docker build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -130,7 +130,7 @@ jobs:
         run: docker build --target web --tag gear-drop-web:ci .
 
   backup-recovery:
-    name: PostgreSQL backup recovery
+    name: CI / PostgreSQL backup recovery
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -194,7 +194,7 @@ jobs:
             | grep -x t
 
   full-stack:
-    name: Full-stack browser test
+    name: CI / Full-stack browser test
     runs-on: ubuntu-latest
     services:
       postgres:

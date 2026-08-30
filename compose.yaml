@@ -179,6 +179,24 @@ services:
       redis:
         condition: service_healthy
 
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *log-options
+    env_file:
+      - path: ${ENV_FILE:-.env.production}
+        format: raw
+    volumes:
+      - backup_data:/backups
+      - ./deploy/backup/backup-postgres:/usr/local/bin/backup-postgres:ro
+      - ./deploy/backup/verify-postgres-backup:/usr/local/bin/verify-postgres-backup:ro
+      - ./deploy/backup/restore-postgres:/usr/local/bin/restore-postgres:ro
+      - ./deploy/backup/crontab:/etc/crontabs/root:ro
+    command: crond -f -l 2
+    depends_on:
+      db:
+        condition: service_healthy
+
   web:
     image: promocode-service-web
     build:
@@ -196,3 +214,4 @@ volumes:
   postgres_data:
   redis_data:
   media_data:
+  backup_data:

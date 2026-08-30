@@ -1,0 +1,44 @@
+set -eu
+
+: "${DB_HOST:=db}"
+: "${DB_PORT:=5432}"
+: "${DB_NAME:?DB_NAME must be set}"
+: "${DB_USER:?DB_USER must be set}"
+: "${DB_PASSWORD:?DB_PASSWORD must be set}"
+: "${BACKUP_DIR:=/backups}"
+: "${BACKUP_RETENTION_DAYS:=14}"
+
+case "$BACKUP_RETENTION_DAYS" in
+    '' | *[!0-9]*)
+        echo 'BACKUP_RETENTION_DAYS must be a non-negative integer.' >&2
+        exit 1
+        ;;
+esac
+
+export PGPASSWORD="$DB_PASSWORD"
+export PGHOST="$DB_HOST"
+export PGPORT="$DB_PORT"
+export PGUSER="$DB_USER"
+
+umask 077
+mkdir -p "$BACKUP_DIR"
+
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup_file="$BACKUP_DIR/${DB_NAME}-${timestamp}.dump"
+temporary_file="${backup_file}.tmp"
+
+trap 'rm -f "$temporary_file"' EXIT
+
+pg_dump \
+    --dbname="$DB_NAME" \
+    --format=custom \
+    --compress=9 \
+    --file="$temporary_file"
+pg_restore --list "$temporary_file" >/dev/null
+mv "$temporary_file" "$backup_file"
+trap - EXIT
+
+find "$BACKUP_DIR" -type f -name "${DB_NAME}-*.dump" \
+    -mtime +"$BACKUP_RETENTION_DAYS" -delete
+
+echo "PostgreSQL backup created: $backup_file"

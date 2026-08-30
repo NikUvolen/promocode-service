@@ -26,14 +26,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=backend-builder /opt/venv /opt/venv
+RUN useradd --create-home --uid 10001 appuser
 WORKDIR /srv/app
-COPY app ./app
+COPY --chown=appuser:appuser app ./app
 WORKDIR /srv/app/app
 
 RUN python manage.py collectstatic --noinput
 
-RUN useradd --create-home --uid 10001 appuser \
-    && mkdir -p /srv/app/app/media \
+RUN mkdir -p /srv/app/app/media \
     && chown appuser:appuser /srv/app/app/media
 USER appuser
 

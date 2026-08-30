@@ -119,6 +119,59 @@ docker compose -p gear-drop --env-file .env.production \
   up -d --build --remove-orphans
 ```
 
+## Continuous delivery
+
+Workflow `Deploy production` запускается только после успешного workflow `CI`
+для push в `main`. Pull request на сервер не развёртывается. Деплой получает
+проверенный SHA, обновляет checkout в `/opt/gear-drop`, пересобирает оба
+контейнера и ждёт readiness endpoint `/health/` до одной минуты.
+
+Перед первым автодеплоем создайте отдельный SSH-ключ для GitHub Actions на
+доверенной машине:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/gear-drop-github-actions \
+  -C github-actions-gear-drop
+```
+
+Добавьте содержимое `~/.ssh/gear-drop-github-actions.pub` в
+`~/.ssh/authorized_keys` пользователя, который владеет `/opt/gear-drop` и
+может выполнять `docker compose`. Закрытый ключ храните только в GitHub
+Secret, не на сервере и не в репозитории.
+
+В **Settings → Secrets and variables → Actions** добавьте repository secrets:
+
+| Secret | Значение |
+| --- | --- |
+| `DEPLOY_HOST` | IP-адрес или домен VPS |
+| `DEPLOY_USER` | SSH-пользователь для деплоя |
+| `DEPLOY_SSH_PRIVATE_KEY` | содержимое файла `gear-drop-github-actions` |
+| `DEPLOY_KNOWN_HOSTS` | проверенная строка `known_hosts` для VPS |
+
+В repository variables добавьте:
+
+| Variable | Значение |
+| --- | --- |
+| `DEPLOY_PATH` | `/opt/gear-drop` |
+| `DEPLOY_PORT` | `22`, если SSH использует стандартный порт |
+
+Для `DEPLOY_KNOWN_HOSTS` сначала получите ключ и обязательно сверяйте его
+отпечаток с выводом команды на VPS:
+
+```bash
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+ssh-keyscan -t ed25519 -H SERVER_IP
+```
+
+Первая команда показывает доверенный fingerprint сервера; только совпадающую
+строку из второй команды можно сохранить в Secret. Workflow не использует
+`StrictHostKeyChecking=no`.
+
+На сервере checkout должен быть чистым и находиться в ветке `main`. Если
+деплой не проходит health check, workflow завершится ошибкой и приложит логи
+`backend` и `web`; автоматического отката нет, потому что миграции базы данных
+могут быть необратимыми.
+
 ## Диагностика
 
 ```bash

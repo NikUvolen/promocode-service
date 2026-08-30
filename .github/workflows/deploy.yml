@@ -1,0 +1,73 @@
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/gear-drop' }}
+      DEPLOY_REVISION: ${{ github.event.workflow_run.head_sha }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+    steps:
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy checked revision
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' DEPLOY_REVISION='$DEPLOY_REVISION' /bin/sh -s" <<'REMOTE'
+          set -eu
+
+          cd "$DEPLOY_PATH"
+          git fetch origin main
+          git checkout main
+          git merge --ff-only "$DEPLOY_REVISION"
+          docker compose -p gear-drop --env-file .env.production \
+            up -d --build --remove-orphans
+
+          attempt=1
+          while [ "$attempt" -le 12 ]; do
+            if curl --fail --silent --show-error http://127.0.0.1:8080/health/; then
+              exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+
+          exit 1
+          REMOTE
+
+      - name: Collect deployment logs on failure
+        if: failure()
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_PATH' && docker compose -p gear-drop --env-file .env.production logs --tail=200 backend web" || true

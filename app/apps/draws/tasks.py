@@ -10,7 +10,7 @@ from django.utils import timezone
 from core.audit import log_audit_event
 from core.models import AuditLog
 from draws.models import Draw, DrawReport, Winner
-from draws.services.draw import run_draw
+from draws.services.draw import get_pending_draw_dates, run_draw
 from draws.services.notifications import send_winner_email
 from draws.services.reports import generate_draw_report
 
@@ -47,44 +47,53 @@ def retry_unnotified_winner_emails_task():
     acks_late=True,
     reject_on_worker_lost=True,
 )
-def run_daily_draw_task():
+def run_daily_draw_task(through_date=None):
     campaign_timezone = ZoneInfo(settings.TIME_ZONE)
-    local_date = timezone.now().astimezone(campaign_timezone).date()
-    draw_date = local_date - timedelta(days=1)
-    already_completed = Draw.objects.filter(
-        draw_date=draw_date,
-        status=Draw.Status.COMPLETED,
-    ).exists()
-    try:
-        draw = run_draw(
-            draw_date=draw_date,
-            trigger=Draw.Trigger.AUTOMATIC,
-        )
-    except Exception as error:
+    if through_date is None:
+        local_date = timezone.now().astimezone(campaign_timezone).date()
+        through_date = local_date - timedelta(days=1)
+    elif isinstance(through_date, str):
+        through_date = datetime.fromisoformat(through_date).date()
+
+    processed_draws = []
+    for draw_date in get_pending_draw_dates(through_date=through_date):
+        try:
+            draw = run_draw(
+                draw_date=draw_date,
+                trigger=Draw.Trigger.AUTOMATIC,
+            )
+        except Exception as error:
+            log_audit_event(
+                AuditLog.EventType.DRAW_FAILED,
+                metadata={
+                    'draw_date': draw_date.isoformat(),
+                    'trigger': Draw.Trigger.AUTOMATIC,
+                    'error': str(error)[:500],
+                },
+            )
+            raise
+        winner_count = draw.winners.count()
         log_audit_event(
-            AuditLog.EventType.DRAW_FAILED,
+            AuditLog.EventType.DRAW_COMPLETED,
+            target=draw,
             metadata={
-                'draw_date': draw_date.isoformat(),
+                'draw_date': draw.draw_date.isoformat(),
                 'trigger': Draw.Trigger.AUTOMATIC,
-                'error': str(error)[:500],
+                'winner_count': winner_count,
+                'catch_up': draw_date != through_date,
             },
         )
-        raise
-    log_audit_event(
-        AuditLog.EventType.DRAW_COMPLETED,
-        target=draw,
-        metadata={
-            'draw_date': draw.draw_date.isoformat(),
-            'trigger': Draw.Trigger.AUTOMATIC,
-            'winner_count': draw.winners.count(),
-            'already_completed': already_completed,
-        },
-    )
+        processed_draws.append(
+            {
+                'draw_id': draw.pk,
+                'draw_date': draw.draw_date.isoformat(),
+                'winner_count': winner_count,
+            }
+        )
+
     return {
-        'draw_id': draw.pk,
-        'draw_date': draw.draw_date.isoformat(),
-        'winner_count': draw.winners.count(),
-        'already_completed': already_completed,
+        'draw_count': len(processed_draws),
+        'draws': processed_draws,
     }
 
 

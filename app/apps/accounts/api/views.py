@@ -272,10 +272,11 @@ class AuthViewSet(viewsets.GenericViewSet):
         detail=False,
         methods=('get',),
         authentication_classes=(CookieJWTAuthentication,),
+        permission_classes=(IsAuthenticated,),
     )
     def session(self, request):
         get_token(request)
-        return Response({'authenticated': request.user.is_authenticated})
+        return Response({'authenticated': True})
 
     @extend_schema(
         tags=('Авторизация',),

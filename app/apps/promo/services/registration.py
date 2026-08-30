@@ -205,9 +205,8 @@ def register_promo_code(*, user, raw_code):
     normalized_code = normalize_code(raw_code)
 
     with transaction.atomic():
-        locked_user = User.objects.select_for_update().get(pk=user.pk)
-        now = timezone.now()
         lock_draw_operation(shared=True)
+        locked_user = User.objects.select_for_update().get(pk=user.pk)
         now = timezone.now()
         result = _register_locked(
             user=locked_user,

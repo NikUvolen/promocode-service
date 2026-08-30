@@ -61,3 +61,10 @@ class DrawReportForm(BaseDialogForm):
                 'Дата начала не может быть позже даты окончания.'
             )
         return cleaned_data
+
+
+class ManualDrawForm(BaseDialogForm):
+    confirmation = forms.BooleanField(
+        label='Я понимаю, что после запуска победителей нельзя изменить.',
+        required=True,
+    )

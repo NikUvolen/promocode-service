@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:e2e": "playwright test",
+    "test:full-stack": "playwright test --config=playwright.full-stack.config.js",
     "preview": "vite preview"
   },
   "dependencies": {

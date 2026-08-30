@@ -1,0 +1,49 @@
+set -eu
+
+: "${DB_HOST:=db}"
+: "${DB_PORT:=5432}"
+: "${DB_NAME:?DB_NAME must be set}"
+: "${DB_USER:?DB_USER must be set}"
+: "${DB_PASSWORD:?DB_PASSWORD must be set}"
+: "${BACKUP_DIR:=/backups}"
+: "${BACKUP_VERIFY_DB:=${DB_NAME}_backup_verify}"
+
+case "$BACKUP_VERIFY_DB" in
+    '' | *[!A-Za-z0-9_]* )
+        echo 'BACKUP_VERIFY_DB may contain only letters, digits, and underscores.' >&2
+        exit 1
+        ;;
+esac
+
+latest_backup="$(find "$BACKUP_DIR" -type f -name "${DB_NAME}-*.dump" \
+    -print | sort | tail -n 1)"
+if [ -z "$latest_backup" ]; then
+    echo 'No PostgreSQL backup is available for verification.' >&2
+    exit 1
+fi
+
+export PGPASSWORD="$DB_PASSWORD"
+export PGHOST="$DB_HOST"
+export PGPORT="$DB_PORT"
+export PGUSER="$DB_USER"
+
+drop_verify_database() {
+    psql --dbname=postgres --set=ON_ERROR_STOP=1 \
+        --command="DROP DATABASE IF EXISTS \"$BACKUP_VERIFY_DB\" WITH (FORCE);"
+}
+
+drop_verify_database
+trap drop_verify_database EXIT INT TERM
+
+psql --dbname=postgres --set=ON_ERROR_STOP=1 \
+    --command="CREATE DATABASE \"$BACKUP_VERIFY_DB\";"
+pg_restore \
+    --dbname="$BACKUP_VERIFY_DB" \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    "$latest_backup"
+psql --dbname="$BACKUP_VERIFY_DB" --set=ON_ERROR_STOP=1 \
+    --command='SELECT count(*) FROM django_migrations;' >/dev/null
+
+echo "PostgreSQL backup restored successfully: $latest_backup"

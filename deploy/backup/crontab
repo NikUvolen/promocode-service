@@ -1,0 +1,5 @@
+# Daily PostgreSQL backup at 00:15 UTC.
+15 0 * * * /bin/sh /usr/local/bin/backup-postgres >> /proc/1/fd/1 2>&1
+
+# Weekly full restore into a temporary database at 00:30 UTC on Sunday.
+30 0 * * 0 /bin/sh /usr/local/bin/verify-postgres-backup >> /proc/1/fd/1 2>&1

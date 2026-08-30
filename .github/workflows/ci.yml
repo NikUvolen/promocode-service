@@ -129,6 +129,70 @@ jobs:
       - name: Build web image
         run: docker build --target web --tag gear-drop-web:ci .
 
+  backup-recovery:
+    name: PostgreSQL backup recovery
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: promocode_service
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d promocode_service"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Create data to back up
+        run: >-
+          docker run --rm --network host
+          -e PGPASSWORD=postgres postgres:17-alpine
+          psql --host=127.0.0.1 --username=postgres
+          --dbname=promocode_service --set=ON_ERROR_STOP=1
+          --command "CREATE TABLE django_migrations (id integer PRIMARY KEY);"
+
+      - name: Back up and restore PostgreSQL
+        run: |
+          mkdir -p "$RUNNER_TEMP/backups"
+          docker run --rm --network host \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=5432 \
+            -e DB_NAME=promocode_service \
+            -e DB_USER=postgres \
+            -e DB_PASSWORD=postgres \
+            -v "$GITHUB_WORKSPACE/deploy/backup:/scripts:ro" \
+            -v "$RUNNER_TEMP/backups:/backups" \
+            postgres:17-alpine sh /scripts/backup-postgres
+          docker run --rm --network host \
+            -e PGPASSWORD=postgres postgres:17-alpine \
+            psql --host=127.0.0.1 --username=postgres \
+            --dbname=promocode_service --set=ON_ERROR_STOP=1 \
+            --command "CREATE TABLE restore_probe (id integer);"
+          backup_file="$(find "$RUNNER_TEMP/backups" -name '*.dump' -print -quit)"
+          docker run --rm --network host \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=5432 \
+            -e DB_NAME=promocode_service \
+            -e DB_USER=postgres \
+            -e DB_PASSWORD=postgres \
+            -v "$GITHUB_WORKSPACE/deploy/backup:/scripts:ro" \
+            -v "$RUNNER_TEMP/backups:/backups" \
+            postgres:17-alpine sh /scripts/restore-postgres \
+            --confirm "${backup_file##*/}"
+          docker run --rm --network host \
+            -e PGPASSWORD=postgres postgres:17-alpine \
+            psql --host=127.0.0.1 --username=postgres \
+            --dbname=promocode_service --tuples-only --no-align \
+            --command "SELECT to_regclass('public.restore_probe') IS NULL AND EXISTS (SELECT 1 FROM django_migrations);" \
+            | grep -x t
+
   full-stack:
     name: Full-stack browser test
     runs-on: ubuntu-latest

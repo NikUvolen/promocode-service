@@ -56,6 +56,60 @@ Nginx overwrites `X-Forwarded-Proto` with the protocol of its own incoming
 connection. Do not change this to pass through the client header: Django uses
 it to determine whether a request is secure.
 
+## PostgreSQL backups and restore verification
+
+The `backup` container creates a PostgreSQL custom-format dump in its isolated
+`backup_data` Docker volume every day at `00:15 UTC`. Dumps older than
+`BACKUP_RETENTION_DAYS` are removed. Every Sunday at `00:30 UTC` the newest
+dump is restored into `BACKUP_VERIFY_DB`; the script checks the restored
+`django_migrations` table and removes the temporary database afterwards.
+
+Check the most recent backup and backup verification in the logs:
+
+```bash
+docker compose -p gear-drop --env-file .env.production \
+  logs --tail=100 backup
+docker compose -p gear-drop --env-file .env.production \
+  exec backup ls -lh /backups
+```
+
+Run a restore verification manually after an important change:
+
+```bash
+docker compose -p gear-drop --env-file .env.production \
+  exec backup /bin/sh /usr/local/bin/verify-postgres-backup
+```
+
+`backup_data` is on the same VPS and therefore does not protect against losing
+the server. Regularly copy the dumps to a separate storage location and test
+restoration from that copy before considering the backup strategy complete.
+
+### Emergency restoration
+
+Restoration drops and recreates the production database before loading the
+archive. First put the application into maintenance by stopping all services
+that can use PostgreSQL:
+
+```bash
+docker compose -p gear-drop --env-file .env.production \
+  stop web backend worker-critical worker-notifications worker-bulk beat
+docker compose -p gear-drop --env-file .env.production \
+  exec backup ls -lh /backups
+```
+
+Choose a `.dump` filename from the output and run the restore. The command
+requires the explicit `--confirm` flag and accepts only files located in
+`/backups`:
+
+```bash
+docker compose -p gear-drop --env-file .env.production \
+  exec backup /bin/sh /usr/local/bin/restore-postgres \
+  --confirm promocode_service-YYYYMMDDTHHMMSSZ.dump
+docker compose -p gear-drop --env-file .env.production \
+  up -d
+curl --fail http://127.0.0.1:8080/health/
+```
+
 ## Обновление
 
 ```bash

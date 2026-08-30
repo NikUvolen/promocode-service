@@ -1,0 +1,57 @@
+set -eu
+
+: "${DB_HOST:=db}"
+: "${DB_PORT:=5432}"
+: "${DB_NAME:?DB_NAME must be set}"
+: "${DB_USER:?DB_USER must be set}"
+: "${DB_PASSWORD:?DB_PASSWORD must be set}"
+: "${BACKUP_DIR:=/backups}"
+
+if [ "${1:-}" != '--confirm' ] || [ "$#" -ne 2 ]; then
+    echo 'Usage: restore-postgres --confirm BACKUP_FILENAME.dump' >&2
+    exit 1
+fi
+
+backup_name="$2"
+case "$backup_name" in
+    *.dump)
+        ;;
+    *)
+        echo 'BACKUP_FILENAME must be a .dump file from the backup directory.' >&2
+        exit 1
+        ;;
+esac
+
+case "$backup_name" in
+    */* | *'..'*)
+        echo 'BACKUP_FILENAME must not contain a path.' >&2
+        exit 1
+        ;;
+esac
+
+backup_file="$BACKUP_DIR/$backup_name"
+if [ ! -f "$backup_file" ]; then
+    echo "Backup file not found: $backup_name" >&2
+    exit 1
+fi
+
+export PGPASSWORD="$DB_PASSWORD"
+export PGHOST="$DB_HOST"
+export PGPORT="$DB_PORT"
+export PGUSER="$DB_USER"
+
+database_identifier="$(printf '%s' "$DB_NAME" | sed 's/"/""/g')"
+database_identifier="\"$database_identifier\""
+
+psql --dbname=postgres --set=ON_ERROR_STOP=1 \
+    --command="DROP DATABASE IF EXISTS $database_identifier WITH (FORCE);"
+psql --dbname=postgres --set=ON_ERROR_STOP=1 \
+    --command="CREATE DATABASE $database_identifier;"
+pg_restore \
+    --dbname="$DB_NAME" \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    "$backup_file"
+
+echo "PostgreSQL database restored from: $backup_file"

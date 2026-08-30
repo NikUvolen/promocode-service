@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connections, IntegrityError
+from django.db import connections, IntegrityError, transaction
 from django.test import Client, override_settings, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -60,6 +61,11 @@ class PromoAdminTests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
+
+    def test_promo_codes_cannot_be_added_manually(self):
+        response = self.client.get(reverse('admin:promo_promocode_add'))
+
+        self.assertEqual(response.status_code, 403)
 
     def test_generation_dialog_uses_relative_htmx_path(self):
         response = self.client.get(
@@ -204,6 +210,42 @@ class PromoAdminTests(TestCase):
         )
         self.assertFalse(PromoCodeImport.objects.exists())
         delay.assert_not_called()
+
+
+class PromoCodeImmutabilityTests(TestCase):
+    def test_model_rejects_code_change(self):
+        promo_code = PromoCode.objects.create(code='AB12CD34')
+        promo_code.code = 'ZX98CV76'
+
+        with self.assertRaises(ValidationError):
+            promo_code.save()
+
+        promo_code.refresh_from_db()
+        self.assertEqual(promo_code.code, 'AB12CD34')
+
+    def test_database_rejects_bulk_code_change(self):
+        promo_code = PromoCode.objects.create(code='AB12CD34')
+
+        with transaction.atomic():
+            with self.assertRaises(IntegrityError):
+                PromoCode.objects.filter(pk=promo_code.pk).update(code='ZX98CV76')
+
+        promo_code.refresh_from_db()
+        self.assertEqual(promo_code.code, 'AB12CD34')
+
+    def test_registration_fields_remain_updatable(self):
+        user = User.objects.create_user(
+            email='promo-user@example.com',
+            password='test-password',
+        )
+        promo_code = PromoCode.objects.create(code='AB12CD34')
+        promo_code.registered_by = user
+        promo_code.registered_at = timezone.now()
+
+        promo_code.save(update_fields=('registered_by', 'registered_at'))
+        promo_code.refresh_from_db()
+
+        self.assertEqual(promo_code.registered_by, user)
 
 
 class PromoCodeImportTests(TestCase):

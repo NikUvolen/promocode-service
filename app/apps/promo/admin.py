@@ -44,11 +44,14 @@ class PromoCodeAdmin(ModelAdmin):
     )
     search_fields = ('code', 'registered_by__email')
     autocomplete_fields = ('registered_by',)
-    readonly_fields = ('registered_by', 'registered_at', 'created_at')
+    readonly_fields = ('code', 'registered_by', 'registered_at', 'created_at')
     list_select_related = ('registered_by',)
     date_hierarchy = 'registered_at'
     ordering = ('code',)
     list_per_page = 100
+
+    def has_add_permission(self, request):
+        return False
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
@@ -63,7 +66,7 @@ class PromoCodeAdmin(ModelAdmin):
     @action(
         description='Сгенерировать коды',
         icon='add_circle',
-        permissions=('add',),
+        permissions=('change',),
         variant=ActionVariant.PRIMARY,
         dialog={
             'title': 'Генерация промокодов',
@@ -135,7 +138,7 @@ class PromoCodeAdmin(ModelAdmin):
     @action(
         description='Импортировать XLSX',
         icon='upload_file',
-        permissions=('add',),
+        permissions=('change',),
         variant=ActionVariant.PRIMARY,
         dialog={
             'title': 'Импорт промокодов из XLSX',

@@ -6,10 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import call, patch
 from zoneinfo import ZoneInfo
 
-from django.db import connections, IntegrityError, transaction
 from django.core import mail
+from django.core.cache import cache
 from django.core.management import call_command
 from django.contrib.auth.models import Permission
+from django.db import connections, IntegrityError, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test import override_settings
 from django.urls import reverse
@@ -24,6 +25,7 @@ from draws.services.draw import (
     run_draw,
 )
 from draws.services.notifications import send_winner_email
+from draws.services.public_results import PUBLIC_DRAWS_CACHE_KEY
 from draws.tasks import (
     cleanup_expired_report_files_task,
     generate_draw_report_task,
@@ -331,6 +333,9 @@ class DrawReportTests(TestCase):
 
 
 class PublicDrawApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
     def test_lists_completed_draws_without_private_user_data(self):
         user = User.objects.create_user(
             email='winner@example.com',
@@ -389,6 +394,57 @@ class PublicDrawApiTests(TestCase):
         self.assertNotIn(user.email, payload)
         self.assertNotIn(Profile.objects.get(user=user).phone, payload)
         self.assertNotIn(promo_code.code, payload)
+
+    def test_invalidates_cached_payload_after_winner_commit(self):
+        user = User.objects.create_user(
+            email='winner@example.com',
+            password='StrongPassword_123!',
+        )
+        profile = Profile.objects.create(
+            user=user,
+            first_name='Михаил',
+            last_name='Иванов',
+        )
+        draw = Draw.objects.create(
+            draw_date=datetime(2026, 8, 12).date(),
+            status=Draw.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+        promo_code = PromoCode.objects.create(
+            code='PUBLIC01',
+            registered_by=user,
+            registered_at=timezone.now(),
+        )
+
+        first_response = self.client.get(reverse('public-draw-list'))
+        self.assertEqual(first_response.json()[0]['winners'], [])
+        self.assertIsNotNone(cache.get(PUBLIC_DRAWS_CACHE_KEY))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            Winner.objects.create(
+                draw=draw,
+                user=user,
+                promo_code=promo_code,
+                prize=Winner.Prize.AIRPODS,
+            )
+        self.assertIsNone(cache.get(PUBLIC_DRAWS_CACHE_KEY))
+
+        second_response = self.client.get(reverse('public-draw-list'))
+        self.assertEqual(
+            second_response.json()[0]['winners'][0]['name'],
+            'Михаил И.',
+        )
+
+        profile.first_name = 'Анна'
+        with self.captureOnCommitCallbacks(execute=True):
+            profile.save(update_fields=('first_name',))
+        self.assertIsNone(cache.get(PUBLIC_DRAWS_CACHE_KEY))
+
+        third_response = self.client.get(reverse('public-draw-list'))
+        self.assertEqual(
+            third_response.json()[0]['winners'][0]['name'],
+            'Анна И.',
+        )
 
 
 class DrawServiceTests(TransactionTestCase):

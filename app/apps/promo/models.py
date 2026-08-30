@@ -1,5 +1,6 @@
-from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
 
 
 class PromoCode(models.Model):
@@ -25,6 +26,23 @@ class PromoCode(models.Model):
         'дата создания',
         auto_now_add=True,
     )
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        code_is_being_updated = update_fields is None or 'code' in update_fields
+
+        if self.pk and code_is_being_updated:
+            original_code = (
+                type(self).objects.filter(pk=self.pk)
+                .values_list('code', flat=True)
+                .first()
+            )
+            if original_code is not None and self.code != original_code:
+                raise ValidationError(
+                    {'code': 'Промокод нельзя изменить после создания.'},
+                )
+
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return self.code

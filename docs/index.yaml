@@ -21,3 +21,6 @@ links:
   - title: Развертывание
     description: Docker Compose, проверка состояния и обновление сервиса.
     href: deployment.md
+  - title: Нагрузочные сценарии
+    description: Воспроизводимые проверки генерации кодов и XLSX-импорта.
+    href: load-testing.md

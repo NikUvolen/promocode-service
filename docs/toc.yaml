@@ -13,5 +13,7 @@ items:
     href: administration.md
   - name: Celery и обслуживание
     href: background-jobs.md
+  - name: Нагрузочные сценарии
+    href: load-testing.md
   - name: Развертывание
     href: deployment.md

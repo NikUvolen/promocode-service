@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend
+    name: CI / Backend
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -74,7 +74,7 @@ jobs:
         run: uv run python app/manage.py test
 
   frontend:
-    name: Frontend
+    name: CI / Frontend
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -117,7 +117,7 @@ jobs:
           retention-days: 7
 
   docker:
-    name: Docker build
+    name: CI / Docker build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -130,7 +130,7 @@ jobs:
         run: docker build --target web --tag gear-drop-web:ci .
 
   backup-recovery:
-    name: PostgreSQL backup recovery
+    name: CI / PostgreSQL backup recovery
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -156,7 +156,7 @@ jobs:
           -e PGPASSWORD=postgres postgres:17-alpine
           psql --host=127.0.0.1 --username=postgres
           --dbname=promocode_service --set=ON_ERROR_STOP=1
-          --command "CREATE TABLE django_migrations (id integer PRIMARY KEY);"
+          --command "CREATE TABLE django_migrations (id integer PRIMARY KEY); INSERT INTO django_migrations (id) VALUES (1);"
 
       - name: Back up and restore PostgreSQL
         run: |
@@ -190,11 +190,11 @@ jobs:
             -e PGPASSWORD=postgres postgres:17-alpine \
             psql --host=127.0.0.1 --username=postgres \
             --dbname=promocode_service --tuples-only --no-align \
-            --command "SELECT to_regclass('public.restore_probe') IS NULL AND EXISTS (SELECT 1 FROM django_migrations);" \
+            --command "SELECT to_regclass('public.restore_probe') IS NULL AND EXISTS (SELECT 1 FROM django_migrations WHERE id = 1);" \
             | grep -x t
 
   full-stack:
-    name: Full-stack browser test
+    name: CI / Full-stack browser test
     runs-on: ubuntu-latest
     services:
       postgres:

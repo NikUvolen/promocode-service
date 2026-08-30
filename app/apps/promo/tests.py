@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections, IntegrityError
@@ -627,6 +628,29 @@ class PromoCodeApiTests(TestCase):
         self.assertGreater(status_response.json()['retry_after'], 0)
         self.assertLessEqual(status_response.json()['retry_after'], 300)
         self.assertIsNotNone(status_response.json()['blocked_until'])
+
+    def test_register_endpoint_has_a_general_request_rate_limit(self):
+        cache.clear()
+        self.profile.promo_code_email_notifications = False
+        self.profile.save(update_fields=('promo_code_email_notifications',))
+        for index in range(20):
+            code = f'{index:08X}'
+            PromoCode.objects.create(code=code)
+            self.assertEqual(self.register(code).status_code, 201)
+
+        response = self.register('ZZ99ZZ99')
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()['retry_after'], 60)
+        self.assertEqual(
+            response.json()['detail'],
+            'Слишком много запросов. Повторите попытку через 1 мин.',
+        )
+        status_response = self.client.get(
+            self.status_url,
+            HTTP_AUTHORIZATION=f"Bearer {self.tokens['access']}",
+        )
+        self.assertEqual(status_response.status_code, 200)
 
     def test_registration_status_is_open_without_active_ban(self):
         response = self.client.get(

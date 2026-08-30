@@ -456,6 +456,7 @@ REST_FRAMEWORK = {
         'auth_login': getenv('AUTH_LOGIN_RATE', '10/minute'),
         'auth_email': getenv('AUTH_EMAIL_RATE', '5/hour'),
         'auth_refresh': getenv('AUTH_REFRESH_RATE', '30/minute'),
+        'promo_code_register': getenv('PROMO_CODE_REGISTER_RATE', '20/minute'),
     },
 }
 

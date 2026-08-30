@@ -53,9 +53,11 @@ class PromoCodeErrorSerializer(serializers.Serializer):
     reason = serializers.CharField()
 
 
-class PromoCodeRateLimitSerializer(PromoCodeErrorSerializer):
+class PromoCodeRateLimitSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    reason = serializers.CharField(required=False)
     retry_after = serializers.IntegerField()
-    blocked_until = serializers.DateTimeField()
+    blocked_until = serializers.DateTimeField(required=False)
 
 
 class PromoCodeRegistrationStatusSerializer(serializers.Serializer):

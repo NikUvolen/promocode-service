@@ -43,5 +43,11 @@ Logout также заносит текущий refresh-токен в blacklist 
 
 Частоты регистрации, входа, email-операций и refresh настраиваются переменными
 `AUTH_REGISTER_RATE`, `AUTH_LOGIN_RATE`, `AUTH_EMAIL_RATE` и
-`AUTH_REFRESH_RATE`. Ограничение ввода промокодов реализовано отдельным
-сервисом и возвращает `429` с `retry_after` и `blocked_until`.
+`AUTH_REFRESH_RATE`. `POST /api/v1/promo-codes/register/` дополнительно
+ограничен по пользователю переменной `PROMO_CODE_REGISTER_RATE` (по умолчанию
+`20/minute`), включая валидные запросы. Его ответ `429` содержит
+`retry_after`.
+
+Отдельный сервис ограничивает три неудачных попытки ввода кода за минуту и
+блокирует следующие попытки на пять минут. В этом случае `429` также содержит
+`reason` и `blocked_until`.

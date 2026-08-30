@@ -23,6 +23,7 @@ from .serializers import (
     PromoCodeRegistrationStatusSerializer,
     PromoCodeSerializer,
 )
+from .throttles import PromoCodeRegisterRateThrottle
 
 
 class PromoCodePagination(PageNumberPagination):
@@ -76,7 +77,11 @@ class PromoCodeViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             429: PromoCodeRateLimitSerializer,
         },
     )
-    @action(detail=False, methods=('post',))
+    @action(
+        detail=False,
+        methods=('post',),
+        throttle_classes=(PromoCodeRegisterRateThrottle,),
+    )
     def register(self, request):
         serializer = PromoCodeRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

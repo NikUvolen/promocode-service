@@ -156,7 +156,7 @@ jobs:
           -e PGPASSWORD=postgres postgres:17-alpine
           psql --host=127.0.0.1 --username=postgres
           --dbname=promocode_service --set=ON_ERROR_STOP=1
-          --command "CREATE TABLE django_migrations (id integer PRIMARY KEY);"
+          --command "CREATE TABLE django_migrations (id integer PRIMARY KEY); INSERT INTO django_migrations (id) VALUES (1);"
 
       - name: Back up and restore PostgreSQL
         run: |
@@ -190,7 +190,7 @@ jobs:
             -e PGPASSWORD=postgres postgres:17-alpine \
             psql --host=127.0.0.1 --username=postgres \
             --dbname=promocode_service --tuples-only --no-align \
-            --command "SELECT to_regclass('public.restore_probe') IS NULL AND EXISTS (SELECT 1 FROM django_migrations);" \
+            --command "SELECT to_regclass('public.restore_probe') IS NULL AND EXISTS (SELECT 1 FROM django_migrations WHERE id = 1);" \
             | grep -x t
 
   full-stack:

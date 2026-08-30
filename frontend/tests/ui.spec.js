@@ -16,6 +16,23 @@ async function mockAuthenticatedSession(page) {
   })
 }
 
+async function mockAnonymousSession(page) {
+  await page.route('**/api/v1/auth/session/', async (route) => {
+    await route.fulfill({ json: { authenticated: false } })
+  })
+}
+
+async function mockEmptyDraws(page) {
+  await page.route('**/api/v1/draws/', async (route) => {
+    await route.fulfill({ json: [] })
+  })
+}
+
+test.beforeEach(async ({ page }) => {
+  await mockAnonymousSession(page)
+  await mockEmptyDraws(page)
+})
+
 async function mockProfileApi(page, currentProfile = emptyProfile) {
   let promoCodeEmailNotifications = true
   await page.route('**/api/v1/auth/profile/', async (route) => {
@@ -147,7 +164,7 @@ test('auth routes render their forms', async ({ page }, testInfo) => {
 
   await page.goto('/register')
   await expect(page.getByRole('heading', { level: 1, name: 'Регистрация' })).toBeVisible()
-  const passwordField = page.getByLabel('Пароль', { exact: true })
+  const passwordField = page.locator('#password')
   const confirmationField = page.getByLabel('Повторите пароль')
   await expect(passwordField).toBeVisible()
   await expect(confirmationField).toBeVisible()

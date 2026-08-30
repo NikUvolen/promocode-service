@@ -39,6 +39,18 @@ curl http://127.0.0.1:8080/health/
 - admin: `http://SERVER_IP:8080/admin/`;
 - Swagger UI: `http://SERVER_IP:8080/api/docs/`.
 
+## Reverse proxy and HTTP
+
+For the current test deployment the service intentionally works over HTTP.
+Keep `DJANGO_SECURE_SSL_REDIRECT`, `DJANGO_SESSION_COOKIE_SECURE`,
+`DJANGO_CSRF_COOKIE_SECURE` and `JWT_COOKIE_SECURE` set to `False` in this
+mode. When TLS is added, enable these settings together and use an HTTPS URL
+in `DJANGO_CSRF_TRUSTED_ORIGINS` and `FRONTEND_URL`.
+
+Nginx overwrites `X-Forwarded-Proto` with the protocol of its own incoming
+connection. Do not change this to pass through the client header: Django uses
+it to determine whether a request is secure.
+
 ## Обновление
 
 ```bash

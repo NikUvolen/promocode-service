@@ -1,10 +1,13 @@
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.test import override_settings, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from redis.exceptions import RedisError
 from rest_framework.exceptions import Throttled
 
 from accounts.models import User
@@ -15,11 +18,46 @@ from core.tasks import cleanup_expired_audit_logs_task
 
 
 class ApiDocumentationTests(TestCase):
-    def test_healthcheck(self):
+    @patch('config.urls.Redis.from_url')
+    @patch('config.urls.connection.cursor')
+    def test_healthcheck(self, database_cursor, redis_from_url):
+        redis_client = redis_from_url.return_value
+
         response = self.client.get(reverse('healthcheck'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {'status': 'ok'})
+        self.assertEqual(
+            response.json(),
+            {
+                'status': 'ok',
+                'checks': {'database': True, 'redis': True},
+            },
+        )
+        database_cursor.return_value.__enter__().execute.assert_called_once_with(
+            'SELECT 1'
+        )
+        redis_client.ping.assert_called_once_with()
+
+    @patch('config.urls.Redis.from_url')
+    @patch('config.urls.connection.cursor')
+    def test_healthcheck_returns_service_unavailable_for_dependencies(
+        self,
+        database_cursor,
+        redis_from_url,
+    ):
+        database_cursor.side_effect = DatabaseError()
+        redis_from_url.return_value.ping.side_effect = RedisError()
+
+        response = self.client.get(reverse('healthcheck'))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json(),
+            {
+                'status': 'unavailable',
+                'checks': {'database': False, 'redis': False},
+            },
+        )
 
     def test_openapi_schema_contains_auth_endpoints(self):
         response = self.client.get(f"{reverse('schema')}?format=json")

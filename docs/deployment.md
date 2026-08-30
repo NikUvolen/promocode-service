@@ -92,7 +92,7 @@ that can use PostgreSQL:
 
 ```bash
 docker compose -p gear-drop --env-file .env.production \
-  stop web backend worker-critical worker-notifications worker-bulk beat
+  stop web backend worker-critical worker-notifications worker-generation worker-imports worker-reports worker-maintenance beat
 docker compose -p gear-drop --env-file .env.production \
   exec backup ls -lh /backups
 ```
@@ -124,7 +124,7 @@ docker compose -p gear-drop --env-file .env.production \
 ```bash
 docker compose -p gear-drop --env-file .env.production ps
 docker compose -p gear-drop --env-file .env.production \
-  logs --tail=200 backend web worker-critical worker-notifications worker-bulk beat
+  logs --tail=200 backend web worker-critical worker-notifications worker-generation worker-imports worker-reports worker-maintenance beat
 ```
 
 Не выполняйте `docker compose down -v`, если данные PostgreSQL, Redis и media

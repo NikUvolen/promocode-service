@@ -339,10 +339,10 @@ CELERY_TASK_ALWAYS_EAGER = IS_TESTING or env_bool(
     False,
 )
 CELERY_TASK_EAGER_PROPAGATES = True
-CELERY_TASK_DEFAULT_QUEUE = 'bulk'
-CELERY_TASK_DEFAULT_EXCHANGE = 'bulk'
+CELERY_TASK_DEFAULT_QUEUE = 'maintenance'
+CELERY_TASK_DEFAULT_EXCHANGE = 'maintenance'
 CELERY_TASK_DEFAULT_EXCHANGE_TYPE = 'direct'
-CELERY_TASK_DEFAULT_ROUTING_KEY = 'bulk'
+CELERY_TASK_DEFAULT_ROUTING_KEY = 'maintenance'
 CELERY_TASK_CREATE_MISSING_QUEUES = False
 CELERY_WORKER_CANCEL_LONG_RUNNING_TASKS_ON_CONNECTION_LOSS = True
 CELERY_TASK_QUEUES = (
@@ -352,7 +352,14 @@ CELERY_TASK_QUEUES = (
         exchange='notifications',
         routing_key='notifications',
     ),
-    Queue('bulk', exchange='bulk', routing_key='bulk'),
+    Queue('generation', exchange='generation', routing_key='generation'),
+    Queue('imports', exchange='imports', routing_key='imports'),
+    Queue('reports', exchange='reports', routing_key='reports'),
+    Queue(
+        'maintenance',
+        exchange='maintenance',
+        routing_key='maintenance',
+    ),
 )
 CELERY_TASK_ROUTES = {
     'draws.tasks.run_daily_draw_task': {'queue': 'critical'},
@@ -370,13 +377,21 @@ CELERY_TASK_ROUTES = {
     'draws.tasks.retry_unnotified_winner_emails_task': {
         'queue': 'notifications',
     },
-    'promo.tasks.generate_promo_codes_task': {'queue': 'bulk'},
-    'promo.tasks.import_promo_codes_task': {'queue': 'bulk'},
-    'draws.tasks.generate_draw_report_task': {'queue': 'bulk'},
-    'promo.tasks.cleanup_expired_import_files_task': {'queue': 'bulk'},
-    'draws.tasks.cleanup_expired_report_files_task': {'queue': 'bulk'},
-    'core.tasks.cleanup_expired_audit_logs_task': {'queue': 'bulk'},
-    'core.tasks.fail_stale_background_jobs_task': {'queue': 'bulk'},
+    'promo.tasks.generate_promo_codes_task': {'queue': 'generation'},
+    'promo.tasks.import_promo_codes_task': {'queue': 'imports'},
+    'draws.tasks.generate_draw_report_task': {'queue': 'reports'},
+    'promo.tasks.cleanup_expired_import_files_task': {
+        'queue': 'maintenance',
+    },
+    'draws.tasks.cleanup_expired_report_files_task': {
+        'queue': 'maintenance',
+    },
+    'core.tasks.cleanup_expired_audit_logs_task': {
+        'queue': 'maintenance',
+    },
+    'core.tasks.fail_stale_background_jobs_task': {
+        'queue': 'maintenance',
+    },
 }
 CELERY_BEAT_SCHEDULE = {
     'run-daily-draw-at-moscow-midnight': {

@@ -132,22 +132,29 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             'promo.tasks.send_registration_email_task': 'notifications',
             'draws.tasks.send_winner_email_task': 'notifications',
             'draws.tasks.retry_unnotified_winner_emails_task': 'notifications',
-            'promo.tasks.generate_promo_codes_task': 'bulk',
-            'promo.tasks.import_promo_codes_task': 'bulk',
-            'draws.tasks.generate_draw_report_task': 'bulk',
-            'promo.tasks.cleanup_expired_import_files_task': 'bulk',
-            'draws.tasks.cleanup_expired_report_files_task': 'bulk',
-            'core.tasks.cleanup_expired_audit_logs_task': 'bulk',
-            'core.tasks.fail_stale_background_jobs_task': 'bulk',
+            'promo.tasks.generate_promo_codes_task': 'generation',
+            'promo.tasks.import_promo_codes_task': 'imports',
+            'draws.tasks.generate_draw_report_task': 'reports',
+            'promo.tasks.cleanup_expired_import_files_task': 'maintenance',
+            'draws.tasks.cleanup_expired_report_files_task': 'maintenance',
+            'core.tasks.cleanup_expired_audit_logs_task': 'maintenance',
+            'core.tasks.fail_stale_background_jobs_task': 'maintenance',
         }
 
-        self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'bulk')
-        self.assertEqual(settings.CELERY_TASK_DEFAULT_EXCHANGE, 'bulk')
-        self.assertEqual(settings.CELERY_TASK_DEFAULT_ROUTING_KEY, 'bulk')
+        self.assertEqual(settings.CELERY_TASK_DEFAULT_QUEUE, 'maintenance')
+        self.assertEqual(settings.CELERY_TASK_DEFAULT_EXCHANGE, 'maintenance')
+        self.assertEqual(settings.CELERY_TASK_DEFAULT_ROUTING_KEY, 'maintenance')
         self.assertFalse(settings.CELERY_TASK_CREATE_MISSING_QUEUES)
         self.assertEqual(
             {queue.name for queue in settings.CELERY_TASK_QUEUES},
-            {'critical', 'notifications', 'bulk'},
+            {
+                'critical',
+                'notifications',
+                'generation',
+                'imports',
+                'reports',
+                'maintenance',
+            },
         )
         self.assertEqual(
             {
@@ -157,7 +164,10 @@ class CeleryQueueRoutingTests(SimpleTestCase):
             {
                 'critical': ('critical', 'critical'),
                 'notifications': ('notifications', 'notifications'),
-                'bulk': ('bulk', 'bulk'),
+                'generation': ('generation', 'generation'),
+                'imports': ('imports', 'imports'),
+                'reports': ('reports', 'reports'),
+                'maintenance': ('maintenance', 'maintenance'),
             },
         )
         self.assertEqual(

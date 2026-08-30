@@ -133,7 +133,34 @@ services:
       redis:
         condition: service_healthy
 
-  worker-bulk:
+  worker-generation:
+    image: promocode-service-backend
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    logging: *log-options
+    env_file:
+      - path: ${ENV_FILE:-.env.production}
+        format: raw
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=INFO
+      - --queues=generation
+      - --concurrency=1
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=1
+      - --hostname=generation@%h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-imports:
     image: promocode-service-backend
     build:
       context: .
@@ -151,11 +178,69 @@ services:
       - config
       - worker
       - --loglevel=INFO
-      - --queues=bulk
+      - --queues=imports
+      - --concurrency=1
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=1
+      - --hostname=imports@%h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-reports:
+    image: promocode-service-backend
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    logging: *log-options
+    volumes:
+      - media_data:/srv/app/app/media
+    env_file:
+      - path: ${ENV_FILE:-.env.production}
+        format: raw
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=INFO
+      - --queues=reports
+      - --concurrency=1
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=1
+      - --hostname=reports@%h
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-maintenance:
+    image: promocode-service-backend
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    logging: *log-options
+    volumes:
+      - media_data:/srv/app/app/media
+    env_file:
+      - path: ${ENV_FILE:-.env.production}
+        format: raw
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=INFO
+      - --queues=maintenance
       - --concurrency=1
       - --prefetch-multiplier=1
       - --max-tasks-per-child=10
-      - --hostname=bulk@%h
+      - --hostname=maintenance@%h
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -66,7 +66,7 @@ class PromoCodeAdmin(ModelAdmin):
     @action(
         description='Сгенерировать коды',
         icon='add_circle',
-        permissions=('add',),
+        permissions=('change',),
         variant=ActionVariant.PRIMARY,
         dialog={
             'title': 'Генерация промокодов',
@@ -138,7 +138,7 @@ class PromoCodeAdmin(ModelAdmin):
     @action(
         description='Импортировать XLSX',
         icon='upload_file',
-        permissions=('add',),
+        permissions=('change',),
         variant=ActionVariant.PRIMARY,
         dialog={
             'title': 'Импорт промокодов из XLSX',

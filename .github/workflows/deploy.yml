@@ -25,12 +25,32 @@ jobs:
     env:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/gear-drop' }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       DEPLOY_REVISION: ${{ github.event.workflow_run.head_sha }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
     steps:
+      - name: Validate deployment configuration
+        run: |
+          : "${DEPLOY_HOST:?Missing production secret DEPLOY_HOST}"
+          : "${DEPLOY_USER:?Missing production secret DEPLOY_USER}"
+          : "${DEPLOY_SSH_PRIVATE_KEY:?Missing production secret DEPLOY_SSH_PRIVATE_KEY}"
+          : "${DEPLOY_KNOWN_HOSTS:?Missing production secret DEPLOY_KNOWN_HOSTS}"
+
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          DEPLOY_PATH="${DEPLOY_PATH:-/opt/gear-drop}"
+
+          case "$DEPLOY_PORT" in
+            *[!0-9]* | "")
+              echo "DEPLOY_PORT must contain a numeric SSH port."
+              exit 1
+              ;;
+          esac
+
+          printf 'DEPLOY_PORT=%s\n' "$DEPLOY_PORT" >> "$GITHUB_ENV"
+          printf 'DEPLOY_PATH=%s\n' "$DEPLOY_PATH" >> "$GITHUB_ENV"
+
       - name: Configure SSH
         run: |
           install -m 700 -d ~/.ssh

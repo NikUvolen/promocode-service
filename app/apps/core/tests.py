@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.test import override_settings, SimpleTestCase, TestCase
@@ -45,6 +46,24 @@ class ApiDocumentationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="swagger-ui"')
+
+
+class DeploymentConfigurationTests(SimpleTestCase):
+    def test_nginx_overwrites_client_forwarded_proto_header(self):
+        nginx_config = (
+            Path(settings.BASE_DIR).parent
+            / 'deploy'
+            / 'nginx'
+            / 'default.conf'
+        ).read_text()
+
+        self.assertNotIn('$http_x_forwarded_proto', nginx_config)
+        self.assertEqual(
+            nginx_config.count(
+                'proxy_set_header X-Forwarded-Proto $scheme;'
+            ),
+            4,
+        )
 
 
 class ApiExceptionHandlerTests(SimpleTestCase):

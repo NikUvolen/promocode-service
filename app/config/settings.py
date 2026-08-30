@@ -71,7 +71,7 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'promo',
-    'draws',
+    'draws.apps.DrawsConfig',
 ]
 
 MIDDLEWARE = [
@@ -439,6 +439,9 @@ BACKGROUND_JOB_RUNNING_TIMEOUT = int(
 )
 DRAW_CAMPAIGN_START_DATE = getenv('DRAW_CAMPAIGN_START_DATE', '')
 LOAD_TEST_ALLOWED = env_bool('LOAD_TEST_ALLOWED', False)
+PUBLIC_DRAWS_CACHE_TIMEOUT = int(
+    getenv('PUBLIC_DRAWS_CACHE_TIMEOUT', str(5 * 60))
+)
 
 AUTH_USER_MODEL = 'accounts.User'
 

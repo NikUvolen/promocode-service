@@ -33,6 +33,11 @@ docker compose -p gear-drop --env-file .env.production ps
 curl http://127.0.0.1:8080/health/
 ```
 
+`/health/` является readiness-проверкой: она возвращает `200` только когда
+Django может обратиться и к PostgreSQL, и к Redis. При недоступности одной из
+зависимостей ответ будет `503`; Docker Compose в этом случае не считает
+backend готовым.
+
 Адреса сервиса:
 
 - frontend: `http://SERVER_IP:8080/`;

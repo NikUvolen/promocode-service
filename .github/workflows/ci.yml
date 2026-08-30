@@ -49,6 +49,7 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
       REDIS_URL: redis://127.0.0.1:6379
+      CACHE_URL: redis://127.0.0.1:6379/1
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -128,3 +129,83 @@ jobs:
 
       - name: Build web image
         run: docker build --target web --tag gear-drop-web:ci .
+
+  full-stack:
+    name: Full-stack browser test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: promocode_service
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d promocode_service"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret-key-that-is-long-enough-for-hmac-sha256
+      DJANGO_DEBUG: "False"
+      DB_NAME: promocode_service
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      REDIS_URL: redis://127.0.0.1:6379
+      CACHE_URL: redis://127.0.0.1:6379/1
+      DJANGO_ALLOWED_HOSTS: 127.0.0.1,localhost
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen --all-groups
+          npm ci --prefix frontend
+
+      - name: Prepare live backend
+        run: |
+          uv run python app/manage.py migrate --noinput
+          uv run python app/manage.py shell -c "from accounts.models import User; User.objects.create_user('ci-user@example.com', 'StrongPassword123!', is_email_verified=True)"
+
+      - name: Install Playwright browser
+        run: npm --prefix frontend exec playwright install --with-deps chromium
+
+      - name: Run full-stack browser test
+        run: npm --prefix frontend run test:full-stack
+
+      - name: Upload full-stack artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-stack-playwright-artifacts
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

@@ -19,6 +19,54 @@ class InvalidDrawPeriod(ValueError):
     pass
 
 
+def get_pending_draw_dates(*, through_date):
+    """Return every campaign date that has not completed by ``through_date``."""
+    campaign_timezone = ZoneInfo(settings.TIME_ZONE)
+    candidates = [through_date]
+
+    configured_start = getattr(settings, 'DRAW_CAMPAIGN_START_DATE', '')
+    if configured_start:
+        candidates.append(datetime.fromisoformat(configured_start).date())
+
+    first_registered_at = (
+        PromoCode.objects.filter(
+            registered_by__isnull=False,
+            registered_at__isnull=False,
+        )
+        .order_by('registered_at')
+        .values_list('registered_at', flat=True)
+        .first()
+    )
+    if first_registered_at is not None:
+        candidates.append(
+            first_registered_at.astimezone(campaign_timezone).date()
+        )
+
+    first_draw_date = Draw.objects.order_by('draw_date').values_list(
+        'draw_date', flat=True
+    ).first()
+    if first_draw_date is not None:
+        candidates.append(first_draw_date)
+
+    start_date = min(candidates)
+    if start_date > through_date:
+        return []
+
+    completed_dates = set(
+        Draw.objects.filter(
+            draw_date__range=(start_date, through_date),
+            status=Draw.Status.COMPLETED,
+        ).values_list('draw_date', flat=True)
+    )
+    dates = []
+    current_date = start_date
+    while current_date <= through_date:
+        if current_date not in completed_dates:
+            dates.append(current_date)
+        current_date += timedelta(days=1)
+    return dates
+
+
 def get_draw_period(draw_date, cutoff=None):
     campaign_timezone = ZoneInfo(settings.TIME_ZONE)
     starts_at = datetime.combine(draw_date, time.min, campaign_timezone)

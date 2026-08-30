@@ -52,6 +52,9 @@ class Draw(models.Model):
                 name='draw_trigger_valid',
             ),
         ]
+        permissions = [
+            ('run_draw', 'Может проводить ручной розыгрыш'),
+        ]
 
 
 class Winner(models.Model):

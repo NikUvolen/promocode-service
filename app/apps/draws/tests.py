@@ -1,13 +1,15 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from threading import Barrier
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import call, patch
 from zoneinfo import ZoneInfo
 
 from django.db import connections, IntegrityError, transaction
 from django.core import mail
+from django.core.management import call_command
+from django.contrib.auth.models import Permission
 from django.test import TestCase, TransactionTestCase
 from django.test import override_settings
 from django.urls import reverse
@@ -16,7 +18,11 @@ from openpyxl import load_workbook
 
 from accounts.models import Profile, User
 from draws.models import Draw, DrawReport, Winner
-from draws.services.draw import InvalidDrawPeriod, run_draw
+from draws.services.draw import (
+    InvalidDrawPeriod,
+    get_pending_draw_dates,
+    run_draw,
+)
 from draws.services.notifications import send_winner_email
 from draws.tasks import (
     cleanup_expired_report_files_task,
@@ -24,6 +30,7 @@ from draws.tasks import (
     run_daily_draw_task,
 )
 from promo.models import PromoCode, PromoCodeAttempt
+from promo.services.registration import register_promo_code
 
 
 class DrawsAdminTests(TestCase):
@@ -70,7 +77,7 @@ class DrawsAdminTests(TestCase):
 
         response = self.client.post(
             reverse('admin:draws_draw_run_manual_draw'),
-            {'_form_submitted': True},
+            {'_form_submitted': True, 'confirmation': 'on'},
         )
 
         self.assertRedirects(
@@ -93,7 +100,7 @@ class DrawsAdminTests(TestCase):
 
         response = self.client.post(
             reverse('admin:draws_draw_run_manual_draw'),
-            {'_form_submitted': True},
+            {'_form_submitted': True, 'confirmation': 'on'},
             HTTP_HX_REQUEST='true',
         )
 
@@ -102,6 +109,27 @@ class DrawsAdminTests(TestCase):
             response.headers['HX-Redirect'],
             reverse('admin:draws_draw_changelist'),
         )
+
+    def test_view_permission_cannot_start_manual_draw(self):
+        viewer = User.objects.create_user(
+            email='viewer@example.com',
+            password='test-password',
+            is_staff=True,
+        )
+        viewer.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='draws',
+                codename='view_draw',
+            )
+        )
+        self.client.force_login(viewer)
+
+        response = self.client.post(
+            reverse('admin:draws_draw_run_manual_draw'),
+            {'_form_submitted': True, 'confirmation': 'on'},
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     @patch('draws.admin.generate_draw_report_task.delay')
     def test_queues_xlsx_report_from_admin(self, delay):
@@ -549,6 +577,26 @@ class DrawServiceTests(TransactionTestCase):
         self.assertEqual(repeated_draw.trigger, Draw.Trigger.MANUAL)
         self.assertEqual(self.schedule_winner_emails.call_count, 2)
 
+    def test_finds_every_uncompleted_date_since_first_registration(self):
+        self.create_participant(
+            1,
+            datetime(2026, 8, 10, 12, 0, tzinfo=self.moscow),
+        )
+        Draw.objects.create(
+            draw_date=date(2026, 8, 10),
+            status=Draw.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+
+        pending_dates = get_pending_draw_dates(
+            through_date=date(2026, 8, 13),
+        )
+
+        self.assertEqual(
+            pending_dates,
+            [date(2026, 8, 11), date(2026, 8, 12), date(2026, 8, 13)],
+        )
+
     def test_rejects_naive_or_invalid_cutoff(self):
         with self.assertRaises(InvalidDrawPeriod):
             run_draw(
@@ -596,6 +644,48 @@ class DrawServiceTests(TransactionTestCase):
         self.assertEqual(Draw.objects.count(), 1)
         self.assertEqual(Winner.objects.count(), 2)
 
+    def test_draw_and_registration_do_not_deadlock(self):
+        user, _ = self.create_participant(1)
+        profile = user.profile
+        profile.first_name = 'Иван'
+        profile.last_name = 'Иванов'
+        profile.no_middle_name = True
+        profile.phone = '+7 (999) 123-45-67'
+        profile.save()
+        code_to_register = PromoCode.objects.create(code='REGISTER')
+        barrier = Barrier(2)
+
+        def start_draw():
+            connections.close_all()
+            try:
+                barrier.wait(timeout=5)
+                return run_draw(
+                    draw_date=self.draw_date,
+                    trigger=Draw.Trigger.AUTOMATIC,
+                ).pk
+            finally:
+                connections.close_all()
+
+        def register_code():
+            connections.close_all()
+            try:
+                barrier.wait(timeout=5)
+                return register_promo_code(
+                    user=user,
+                    raw_code=code_to_register.code,
+                ).pk
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            draw_future = executor.submit(start_draw)
+            registration_future = executor.submit(register_code)
+            draw_future.result(timeout=10)
+            registration_future.result(timeout=10)
+
+        code_to_register.refresh_from_db()
+        self.assertEqual(code_to_register.registered_by_id, user.pk)
+
 
 class DrawConstraintTests(TransactionTestCase):
     def test_rejects_invalid_draw_status_and_trigger(self):
@@ -637,9 +727,15 @@ class DrawConstraintTests(TransactionTestCase):
 
 
 class DailyDrawTaskTests(TestCase):
+    @patch('draws.tasks.get_pending_draw_dates')
     @patch('draws.tasks.run_draw')
     @patch('draws.tasks.timezone.now')
-    def test_draws_previous_moscow_date(self, now, draw_service):
+    def test_catches_up_every_missed_date(
+        self,
+        now,
+        draw_service,
+        pending_draw_dates,
+    ):
         now.return_value = datetime(
             2026,
             8,
@@ -648,27 +744,67 @@ class DailyDrawTaskTests(TestCase):
             0,
             tzinfo=ZoneInfo('UTC'),
         )
-        draw_service.return_value = SimpleNamespace(
-            pk=42,
-            draw_date=datetime(2026, 8, 11).date(),
-            winners=SimpleNamespace(count=lambda: 2),
-        )
+        pending_draw_dates.return_value = [
+            date(2026, 8, 10),
+            date(2026, 8, 11),
+        ]
+        draw_service.side_effect = [
+            SimpleNamespace(
+                pk=41,
+                draw_date=date(2026, 8, 10),
+                winners=SimpleNamespace(count=lambda: 2),
+            ),
+            SimpleNamespace(
+                pk=42,
+                draw_date=date(2026, 8, 11),
+                winners=SimpleNamespace(count=lambda: 1),
+            ),
+        ]
 
         result = run_daily_draw_task()
 
-        draw_service.assert_called_once_with(
-            draw_date=datetime(2026, 8, 11).date(),
-            trigger=Draw.Trigger.AUTOMATIC,
+        pending_draw_dates.assert_called_once_with(
+            through_date=date(2026, 8, 11),
+        )
+        self.assertEqual(
+            draw_service.call_args_list,
+            [
+                call(
+                    draw_date=date(2026, 8, 10),
+                    trigger=Draw.Trigger.AUTOMATIC,
+                ),
+                call(
+                    draw_date=date(2026, 8, 11),
+                    trigger=Draw.Trigger.AUTOMATIC,
+                ),
+            ],
         )
         self.assertEqual(
             result,
             {
-                'draw_id': 42,
-                'draw_date': '2026-08-11',
-                'winner_count': 2,
-                'already_completed': False,
+                'draw_count': 2,
+                'draws': [
+                    {
+                        'draw_id': 41,
+                        'draw_date': '2026-08-10',
+                        'winner_count': 2,
+                    },
+                    {
+                        'draw_id': 42,
+                        'draw_date': '2026-08-11',
+                        'winner_count': 1,
+                    },
+                ],
             },
         )
+
+    @patch('draws.management.commands.run_missed_draws.run_daily_draw_task')
+    def test_management_command_runs_catch_up_until_given_date(self, task):
+        task.return_value = {'draw_count': 0, 'draws': []}
+
+        call_command('run_missed_draws', '--through', '2026-08-13')
+
+        task.assert_called_once_with(date(2026, 8, 13))
 
     @override_settings(TIME_ZONE='Europe/Moscow')
     def test_beat_registers_daily_draw_task(self):

@@ -14,7 +14,7 @@ from unfold.enums import ActionVariant
 from core.audit import log_audit_event
 from core.models import AuditLog
 
-from .forms import DrawReportForm
+from .forms import DrawReportForm, ManualDrawForm
 from .models import Draw, DrawReport, Winner
 from .tasks import generate_draw_report_task, run_manual_draw_task
 
@@ -71,15 +71,17 @@ class DrawAdmin(ModelAdmin):
     @action(
         description='Провести розыгрыш',
         icon='casino',
-        permissions=('view',),
+        permissions=('run_draw',),
         variant=ActionVariant.PRIMARY,
         dialog={
             'title': 'Провести розыгрыш сейчас?',
             'description': (
                 'В розыгрыш попадут промокоды, зарегистрированные после '
                 'предыдущего розыгрыша и до момента запуска. Повторный '
-                'запуск за эту дату не изменит победителей.'
+                'запуск за эту дату не изменит победителей. Отменить '
+                'завершённый розыгрыш штатными средствами нельзя.'
             ),
+            'form_class': ManualDrawForm,
             'form_submit_text': 'Запустить',
         },
     )
@@ -127,6 +129,9 @@ class DrawAdmin(ModelAdmin):
             request,
             'admin:draws_draw_changelist',
         )
+
+    def has_run_draw_permission(self, request):
+        return request.user.has_perm('draws.run_draw')
 
     @action(
         description='Выгрузить статистику XLSX',

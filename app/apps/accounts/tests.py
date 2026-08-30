@@ -227,6 +227,7 @@ class JwtAuthApiTests(TestCase):
     login_url = reverse('auth-login')
     refresh_url = reverse('auth-refresh')
     logout_url = reverse('auth-logout')
+    session_url = reverse('auth-session')
 
     def create_user(self, *, is_email_verified=True):
         user = User.objects.create_user(
@@ -309,6 +310,18 @@ class JwtAuthApiTests(TestCase):
         self.client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = rotated_refresh
         reused_response = self.client.post(self.refresh_url)
         self.assertEqual(reused_response.status_code, 400)
+
+    def test_session_requires_an_access_token(self):
+        self.create_user()
+        login_response = self.login()
+        self.client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = (
+            login_response.cookies[settings.JWT_REFRESH_COOKIE_NAME].value
+        )
+        del self.client.cookies[settings.JWT_ACCESS_COOKIE_NAME]
+
+        response = self.client.get(self.session_url)
+
+        self.assertEqual(response.status_code, 401)
 
 
 class PasswordResetApiTests(TestCase):

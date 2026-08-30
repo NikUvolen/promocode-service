@@ -28,6 +28,32 @@ async function mockEmptyDraws(page) {
   })
 }
 
+async function mockSessionRefresh(page) {
+  let sessionRequests = 0
+  let refreshRequests = 0
+
+  await page.route('**/api/v1/auth/session/', async (route) => {
+    sessionRequests += 1
+    await route.fulfill({
+      status: sessionRequests === 1 ? 401 : 200,
+      json: { authenticated: true },
+    })
+  })
+  await page.route('**/api/v1/auth/refresh/', async (route) => {
+    refreshRequests += 1
+    await route.fulfill({ json: { detail: 'Сессия обновлена.' } })
+  })
+
+  return {
+    get refreshRequests() {
+      return refreshRequests
+    },
+    get sessionRequests() {
+      return sessionRequests
+    },
+  }
+}
+
 test.beforeEach(async ({ page }) => {
   await mockAnonymousSession(page)
   await mockEmptyDraws(page)
@@ -187,6 +213,18 @@ test('page shells use the same container boundary', async ({ page }) => {
   const authBrand = await page.locator('.auth-header .brand').boundingBox()
   const authMain = await page.locator('.auth-main').boundingBox()
   expect(Math.abs(authBrand.x - authMain.x)).toBeLessThanOrEqual(1)
+})
+
+test('restores the session with a refresh token', async ({ page }) => {
+  const session = await mockSessionRefresh(page)
+  await mockProfileApi(page)
+  await mockPromoApi(page)
+
+  await page.goto('/account')
+
+  await expect(page.getByLabel('Email')).toHaveValue('user@example.com')
+  expect(session.refreshRequests).toBe(1)
+  expect(session.sessionRequests).toBe(2)
 })
 
 test('account header and content share a container', async ({ page }) => {

@@ -7,7 +7,10 @@
 | --- | --- |
 | `critical` | Автоматический и ручной розыгрыш |
 | `notifications` | Подтверждение email, восстановление пароля, письма о кодах и победах |
-| `bulk` | Генерация кодов, XLSX-импорт, отчеты, очистка и восстановление зависших задач |
+| `generation` | Генерация промокодов |
+| `imports` | XLSX-импорт промокодов |
+| `reports` | Формирование XLSX-отчётов |
+| `maintenance` | Очистка файлов и аудита, восстановление зависших задач |
 
 ## Расписание
 
@@ -28,14 +31,14 @@
 
 ```bash
 docker compose -p gear-drop --env-file .env.production \
-  up -d worker-critical worker-notifications worker-bulk beat
+  up -d worker-critical worker-notifications worker-generation worker-imports worker-reports worker-maintenance beat
 ```
 
 Логи:
 
 ```bash
 docker compose -p gear-drop --env-file .env.production \
-  logs -f worker-critical worker-notifications worker-bulk beat
+  logs -f worker-critical worker-notifications worker-generation worker-imports worker-reports worker-maintenance beat
 ```
 
 Если задача остается в статусе `В очереди`, проверьте, что запущен worker

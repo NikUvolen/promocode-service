@@ -7,22 +7,23 @@
 
 ## Подготовка isolated environment
 
-Создайте `.env.load` на основе production-шаблона. Используйте другой Compose
-project, базу и порт; не подключайтесь к production PostgreSQL.
-
-```dotenv
-DB_NAME=promocode_load
-POSTGRES_DB=promocode_load
-APP_PORT=8081
-LOAD_TEST_ALLOWED=True
-```
-
-Запустите isolated stack и примените миграции:
+Создайте локальный файл окружения по шаблону:
 
 ```bash
-docker compose -p gear-drop-load --env-file .env.load up -d --build
+cp .env.load.example .env.load
+```
+
+Шаблон уже задаёт отдельные Compose-volumes, базу `promocode_load`, порт
+`127.0.0.1:8081` и `LOAD_TEST_ALLOWED=True`. Не меняйте в нём `DB_HOST` на
+production-хост и не запускайте команды без `-p gear-drop-load`.
+
+Соберите образ, запустите только PostgreSQL и Redis, затем примените миграции:
+
+```bash
+docker compose -p gear-drop-load --env-file .env.load build backend
+docker compose -p gear-drop-load --env-file .env.load up -d db redis
 docker compose -p gear-drop-load --env-file .env.load \
-  exec backend python manage.py migrate --noinput
+  run --rm --no-deps backend python manage.py migrate --noinput
 ```
 
 ## Запуск
@@ -31,7 +32,7 @@ docker compose -p gear-drop-load --env-file .env.load \
 
 ```bash
 docker compose -p gear-drop-load --env-file .env.load \
-  exec backend python manage.py run_load_scenarios \
+  run --rm --no-deps backend python manage.py run_load_scenarios \
   --scenario generation --generation-count 1500000 --confirm
 ```
 
@@ -40,7 +41,7 @@ docker compose -p gear-drop-load --env-file .env.load \
 
 ```bash
 docker compose -p gear-drop-load --env-file .env.load \
-  exec backend python manage.py run_load_scenarios \
+  run --rm --no-deps backend python manage.py run_load_scenarios \
   --scenario import --confirm
 ```
 
